@@ -17,6 +17,9 @@ import circadianRhythmRouter from './routes/circadian-rhythm.js';
 import medicationAdherenceRouter from './routes/medication-adherence.js';
 import notificationsRouter from './routes/notifications.js';
 import nutritionRouter from './routes/nutrition.js';
+import circadianProfileRouter from './routes/circadian-profile.js';
+import medicationSchedulerRouter from './routes/medication-scheduler.js';
+import circadianInsightsRouter from './routes/circadian-insights.js';
 
 console.log("🔑 Gemini API Key loaded:", process.env.GEMINI_API_KEY ? "YES" : "NO");
 
@@ -63,6 +66,11 @@ app.use('/api/video-sessions', videoSessionsRouter);
 // AI & Insights Routes
 app.use('/api/health-insights', healthInsightsRouter);
 app.use('/api/notifications', notificationsRouter);
+
+// Chronobiology & Scheduling Routes
+app.use('/api/circadian-profile', circadianProfileRouter);
+app.use('/api/medication-scheduler', medicationSchedulerRouter);
+app.use('/api/circadian-insights', circadianInsightsRouter);
 
 // 404 handler
 app.use((req, res) => {

@@ -1,4 +1,5 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import Medication from '../models/Medication.js';
 
 const router = express.Router();
@@ -17,6 +18,9 @@ router.post('/', async (req, res) => {
 // Get all medications for a user
 router.get('/user/:userId', async (req, res) => {
   try {
+    if (!mongoose.isValidObjectId(req.params.userId)) {
+      return res.json([]);
+    }
     const medications = await Medication.find({ userId: req.params.userId });
     res.json(medications);
   } catch (error) {

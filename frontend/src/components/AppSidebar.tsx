@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import {
   LayoutDashboard, PlusCircle, AlertTriangle, CalendarClock, Bell,
   Lightbulb, Apple, User, Mic, AlertOctagon, QrCode, Video,
-  BarChart3, Settings, ChevronLeft, ChevronRight, Activity
+  BarChart3, Settings, ChevronLeft, ChevronRight, Activity, Brain
 } from "lucide-react";
 import { useState } from "react";
 
@@ -12,6 +12,7 @@ const navItems = [
   { label: "Add Medication", path: "/add-medication", icon: PlusCircle },
   { label: "Drug Interaction", path: "/drug-interaction", icon: AlertTriangle },
   { label: "Schedule Generator", path: "/schedule", icon: CalendarClock },
+  { label: "Chronobiology Scheduler", path: "/chronobiology-scheduler", icon: Brain },
   { label: "Reminders", path: "/reminders", icon: Bell },
   { label: "Health Suggestions", path: "/suggestions", icon: Lightbulb },
   { label: "Nutrition", path: "/nutrition", icon: Apple },

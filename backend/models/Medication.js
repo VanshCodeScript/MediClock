@@ -20,6 +20,11 @@ const medicationSchema = new mongoose.Schema(
       enum: ['once daily', 'twice daily', 'three times daily', 'as needed'],
       required: true,
     },
+    foodRule: {
+      type: String,
+      enum: ['none', 'before food', 'after food', 'with food', 'empty stomach'],
+      default: 'none',
+    },
     reason: String,
     sideEffects: [String],
     interactions: [String],

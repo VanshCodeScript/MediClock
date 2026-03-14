@@ -23,6 +23,7 @@ import VideoCallPage from "./pages/VideoCallPage";
 import DoctorDashboard from "./pages/DoctorDashboard";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import SettingsPage from "./pages/SettingsPage";
+import ChronobiologySchedulerPage from "./pages/ChronobiologySchedulerPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -53,6 +54,7 @@ const App = () => (
             <Route path="/video-call" element={<VideoCallPage />} />
             <Route path="/doctor-dashboard" element={<DoctorDashboard />} />
             <Route path="/analytics" element={<AnalyticsPage />} />
+            <Route path="/chronobiology-scheduler" element={<ChronobiologySchedulerPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
 
