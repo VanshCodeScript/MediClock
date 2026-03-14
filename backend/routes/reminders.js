@@ -1,5 +1,9 @@
 import express from 'express';
 import Reminder from '../models/Reminder.js';
+import {
+  buildMedicationTimelineForUser,
+  sendDueWhatsAppRemindersForUser,
+} from '../services/reminderService.js';
 
 const router = express.Router();
 
@@ -68,6 +72,44 @@ router.get('/user/:userId', async (req, res) => {
     const reminders = await Reminder.find({ userId: req.params.userId })
       .populate('medicationId');
     res.json(reminders);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get schedule-derived reminder timeline (sorted by reminder time)
+router.get('/user/:userId/timeline', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const result = await buildMedicationTimelineForUser(userId, new Date());
+
+    res.json({
+      userId,
+      timeline: result.timeline,
+      whatsappConfigured: result.whatsappConfigured,
+      total: result.timeline.length,
+      pending: result.timeline.filter((r) => r.status === 'pending' || r.status === 'due').length,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Manually trigger due WhatsApp sends (useful for page-trigger + testing)
+router.post('/user/:userId/send-due-whatsapp', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const force = Boolean(req.body?.force);
+    const resendSent = Boolean(req.body?.resendSent);
+    const sendResult = await sendDueWhatsAppRemindersForUser(userId, new Date(), { force, resendSent });
+    const timelineResult = await buildMedicationTimelineForUser(userId, new Date());
+
+    res.json({
+      message: force ? 'Force WhatsApp reminder check completed' : 'Due WhatsApp reminder check completed',
+      sendResult,
+      timeline: timelineResult.timeline,
+      whatsappConfigured: timelineResult.whatsappConfigured,
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

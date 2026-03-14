@@ -22,6 +22,7 @@ import circadianProfileRouter from './routes/circadian-profile.js';
 import medicationSchedulerRouter from './routes/medication-scheduler.js';
 import circadianInsightsRouter from './routes/circadian-insights.js';
 import sosRouter from './routes/sos.js';
+import { startReminderAutomation } from './services/reminderAutomation.js';
 
 console.log("🔑 Gemini API Key loaded:", process.env.GEMINI_API_KEY ? "YES" : "NO");
 
@@ -93,4 +94,5 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
+  startReminderAutomation();
 });
