@@ -2,7 +2,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import PageTransition from "@/components/PageTransition";
 import { Apple, Plus, Camera, Upload, Sparkles, Loader2, UtensilsCrossed, Flame, Beef, Wheat, Droplet, Check } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 
 const initialMeals = [
   { type: "Breakfast", time: "8:00 AM", items: "Oatmeal, banana, green tea", cal: 350 },
@@ -38,9 +38,13 @@ const NutritionPage = () => {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [added, setAdded] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showCamera, setShowCamera] = useState(false);
+  const [cameraStarting, setCameraStarting] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
   const macros = [
     { name: "Protein", value: macroTotals.protein, color: "#0000FF" },
@@ -60,6 +64,99 @@ const NutritionPage = () => {
     reader.onload = (ev) => setSelectedImage(ev.target?.result as string);
     reader.readAsDataURL(file);
   }, []);
+
+  const stopCamera = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+  }, []);
+
+  const openCamera = useCallback(async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError("Camera is not supported in this browser. Please use Upload Food Image.");
+      return;
+    }
+
+    try {
+      setCameraStarting(true);
+      setCameraError(null);
+      setError(null);
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
+      });
+
+      streamRef.current = stream;
+      setShowCamera(true);
+
+      requestAnimationFrame(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          void videoRef.current.play();
+        }
+      });
+    } catch {
+      setCameraError("Unable to access camera. Allow camera permission or use Upload Food Image.");
+      stopCamera();
+    } finally {
+      setCameraStarting(false);
+    }
+  }, [stopCamera]);
+
+  const closeCamera = useCallback(() => {
+    setShowCamera(false);
+    stopCamera();
+  }, [stopCamera]);
+
+  const captureFromCamera = useCallback(async () => {
+    if (!videoRef.current) {
+      setCameraError("Camera preview is not ready yet.");
+      return;
+    }
+
+    const video = videoRef.current;
+    const width = video.videoWidth || 1280;
+    const height = video.videoHeight || 720;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      setCameraError("Failed to capture image. Please try again.");
+      return;
+    }
+
+    ctx.drawImage(video, 0, 0, width, height);
+
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(resolve, "image/jpeg", 0.92);
+    });
+
+    if (!blob) {
+      setCameraError("Failed to process captured image. Please retry.");
+      return;
+    }
+
+    const file = new File([blob], `camera-meal-${Date.now()}.jpg`, { type: "image/jpeg" });
+    setSelectedFile(file);
+    setSelectedImage(canvas.toDataURL("image/jpeg", 0.92));
+    setResult(null);
+    setAdded(false);
+    setError(null);
+    setCameraError(null);
+    closeCamera();
+  }, [closeCamera]);
 
   const analyzeMeal = useCallback(async () => {
     if (!selectedFile) return;
@@ -117,7 +214,14 @@ const NutritionPage = () => {
     setResult(null);
     setAdded(false);
     setError(null);
+    setCameraError(null);
   }, []);
+
+  useEffect(() => {
+    return () => {
+      stopCamera();
+    };
+  }, [stopCamera]);
 
   return (
     <PageTransition>
@@ -154,13 +258,15 @@ const NutritionPage = () => {
                     <motion.button
                       whileHover={{ scale: 1.03 }}
                       whileTap={{ scale: 0.97 }}
-                      onClick={() => cameraInputRef.current?.click()}
+                      onClick={openCamera}
+                      disabled={cameraStarting}
                       className="px-5 py-2.5 bg-card border border-border rounded-xl text-sm font-medium flex items-center gap-2 hover:border-primary/30 transition-colors"
                     >
-                      <Camera className="w-4 h-4" /> Use Camera
+                      <Camera className="w-4 h-4" /> {cameraStarting ? "Opening Camera..." : "Use Camera"}
                     </motion.button>
                   </div>
                   <p className="text-xs text-muted-foreground">JPG, PNG up to 10MB</p>
+                  {cameraError && <p className="text-xs text-red-600 text-center">{cameraError}</p>}
                 </div>
               ) : (
                 <motion.div
@@ -183,7 +289,6 @@ const NutritionPage = () => {
               )}
 
               <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageSelect} />
-              <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleImageSelect} />
 
               {selectedImage && !result && !analyzing && (
                 <motion.button
@@ -313,6 +418,53 @@ const NutritionPage = () => {
             </div>
           </div>
         </motion.div>
+
+        <AnimatePresence>
+          {showCamera && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+            >
+              <motion.div
+                initial={{ scale: 0.96, y: 10 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.96, y: 10 }}
+                className="w-full max-w-3xl rounded-2xl bg-card border border-border p-4 space-y-3"
+              >
+                <div className="flex items-center justify-between">
+                  <h4 className="font-semibold text-sm">Camera Capture</h4>
+                  <button
+                    onClick={closeCamera}
+                    className="px-3 py-1.5 rounded-lg bg-muted text-xs font-medium hover:bg-accent"
+                  >
+                    Close
+                  </button>
+                </div>
+
+                <div className="rounded-xl overflow-hidden bg-black aspect-video">
+                  <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+                </div>
+
+                <div className="flex justify-end gap-2">
+                  <button
+                    onClick={closeCamera}
+                    className="px-4 py-2 rounded-lg border border-border text-sm font-medium"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={captureFromCamera}
+                    className="px-4 py-2 rounded-lg gradient-blue text-primary-foreground text-sm font-medium flex items-center gap-2"
+                  >
+                    <Camera className="w-4 h-4" /> Capture Photo
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Existing meals + nutrition summary layout (preserved) */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

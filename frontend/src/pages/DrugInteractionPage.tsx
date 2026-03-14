@@ -52,6 +52,7 @@ const DrugInteractionPage = () => {
   const [showLoadingAnimation, setShowLoadingAnimation] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [isApiReady, setIsApiReady] = useState(false);
+  const [hasChecked, setHasChecked] = useState(false);
 
   // Minimum loading time in milliseconds
   const MIN_LOADING_TIME = 6000;
@@ -81,6 +82,7 @@ const DrugInteractionPage = () => {
     setIsLoading(true);
     setShowLoadingAnimation(true);
     setApiError(null);
+    setHasChecked(true);
     loadingStartTime = Date.now();
 
     try {
@@ -136,7 +138,11 @@ const DrugInteractionPage = () => {
         {/* Drug Selector */}
         <DrugSelector
           selectedDrugs={selectedDrugs}
-          onDrugsChange={setSelectedDrugs}
+          onDrugsChange={(drugs) => {
+            setSelectedDrugs(drugs);
+            setHasChecked(false);
+            setInteractions([]);
+          }}
           onCheck={handleCheckInteractions}
           isLoading={isLoading}
         />
@@ -264,7 +270,8 @@ const DrugInteractionPage = () => {
         )}
 
         {/* No interactions message */}
-        {selectedDrugs.length >= 2 &&
+        {hasChecked &&
+          selectedDrugs.length >= 2 &&
           !isLoading &&
           interactions.length === 0 &&
           !apiError &&

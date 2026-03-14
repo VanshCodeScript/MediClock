@@ -1,4 +1,17 @@
-const API_BASE_URL = "http://localhost:5001/api";
+const getApiBaseUrl = () => {
+  const envBase = import.meta.env.VITE_API_BASE_URL;
+  if (envBase) {
+    return String(envBase).replace(/\/$/, "");
+  }
+
+  if (typeof window !== "undefined") {
+    return `${window.location.protocol}//${window.location.hostname}:5001/api`;
+  }
+
+  return "http://localhost:5001/api";
+};
+
+const API_BASE_URL = getApiBaseUrl();
 const USER_ID_KEY = "mediclock_user_id";
 const USER_CACHE_KEY = "mediclock_user";
 const TOKEN_KEY = "mediclock_token";

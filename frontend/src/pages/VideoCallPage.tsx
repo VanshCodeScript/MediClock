@@ -7,23 +7,25 @@ import TwilioVideo from "twilio-video";
 import { api } from "@/lib/api";
 import { useLocation } from "react-router-dom";
 
-// Get LAN IP from current window location or use fallback
-const getLanIP = () => {
-  const hostname = window.location.hostname;
-  const port = window.location.port || '5001';
-  
-  // If accessing from 10.x.x.x IP, use that IP
-  if (hostname.startsWith('10.')) {
-    return `http://${hostname}:5001`;
+const resolveSocketBase = () => {
+  const envSocketBase = import.meta.env.VITE_SOCKET_BASE_URL;
+  if (envSocketBase) {
+    return String(envSocketBase).replace(/\/$/, "");
   }
-  
-  // If localhost/127.0.0.1, try to detect LAN IP from API URL
-  // For now, use the detected LAN IP from environment
-  return `http://10.0.8.185:5001`; // Doctor's machine IP
+
+  const envApiBase = import.meta.env.VITE_API_BASE_URL;
+  if (envApiBase) {
+    return String(envApiBase).replace(/\/api\/?$/, "").replace(/\/$/, "");
+  }
+
+  if (typeof window !== "undefined") {
+    return `${window.location.protocol}//${window.location.hostname}:5001`;
+  }
+
+  return "http://localhost:5001";
 };
 
-const API_BASE = getLanIP();
-console.log("📡 Socket connection to:", API_BASE);
+const API_BASE = resolveSocketBase();
 
 type StoredUser = {
   _id: string;

@@ -4,313 +4,234 @@
 
 import { InteractionResult } from "./interactionService";
 
-/**
- * Calculate dynamic risk rating based on interaction characteristics
- * Returns 0-10 scale
- */
+export type Severity = "high" | "medium" | "low";
+
+/* ------------------------------------------------ */
+/* Dynamic Risk Rating */
+/* ------------------------------------------------ */
+
 export function calculateDynamicRiskRating(
   interaction: InteractionResult
 ): number {
   let riskScore = 0;
 
-  // 1. Base risk from severity (0-4 points)
-  const severityScore: Record<string, number> = {
+  const severityScore: Record<Severity, number> = {
     high: 4,
     medium: 2.5,
     low: 1,
   };
-  riskScore += severityScore[interaction.severity] || 2;
 
-  // 2. Confidence boost (0-2 points)
-  const confidence = interaction.confidence || 50;
+  riskScore += severityScore[interaction.severity] ?? 2;
+
+  const confidence = interaction.confidence ?? 50;
   riskScore += (confidence / 100) * 2;
 
-  // 3. Side effects multiplier (0-2 points)
-  const sideEffectsCount = interaction.sideEffects?.length || 0;
-  const sideEffectScore = Math.min((sideEffectsCount / 5) * 2, 2);
-  riskScore += sideEffectScore;
+  const sideEffectsCount = interaction.sideEffects?.length ?? 0;
+  riskScore += Math.min((sideEffectsCount / 5) * 2, 2);
 
-  // 4. Mechanism complexity (0-1.5 points)
   if (interaction.mechanism) {
-    const mechanismLength = interaction.mechanism.length;
-    const mechanismScore = Math.min((mechanismLength / 200) * 1.5, 1.5);
-    riskScore += mechanismScore;
+    riskScore += Math.min((interaction.mechanism.length / 200) * 1.5, 1.5);
   }
 
-  // 5. Recommendation flag (0-0.5 points)
-  if (
-    interaction.recommendation &&
-    interaction.recommendation.toLowerCase().includes("avoid")
-  ) {
+  if (interaction.recommendation?.toLowerCase().includes("avoid")) {
     riskScore += 0.5;
   }
 
-  // Clamp to 0-10 scale
-  return Math.min(Math.max(riskScore, 0), 10);
+  return Math.max(0, Math.min(10, riskScore));
 }
 
-/**
- * Generate a simple, patient-friendly explanation for an interaction
- */
+/* ------------------------------------------------ */
+/* Simple Explanation */
+/* ------------------------------------------------ */
+
 export function generateSimpleExplanation(
   interaction: InteractionResult
 ): string {
   const { drugA, drugB, severity, note } = interaction;
-  
-  const severityDescriptions: Record<string, string> = {
+
+  const severityDescriptions: Record<Severity, string> = {
     high: "serious or potentially life-threatening",
     medium: "moderate and should be monitored carefully",
     low: "mild and unlikely to cause major problems",
   };
-  
-  const severityDesc = severityDescriptions[severity] || "moderate";
-  
-  // Try to extract a simple reason from the note if it exists
-  if (note && note.length > 0) {
+
+  const severityDesc = severityDescriptions[severity] ?? "moderate";
+
+  if (note) {
     return `Taking ${drugA} together with ${drugB} can cause a ${severityDesc} interaction. ${note}`;
   }
-  
-  return `${drugA} and ${drugB} may interact in a ${severityDesc} manner when taken together. Please consult with your doctor about how to safely use these medicines together.`;
+
+  return `${drugA} and ${drugB} may interact in a ${severityDesc} way when taken together. Always consult your doctor before combining these medicines.`;
 }
 
-/**
- * Generate an explanation for how the interaction happens
- */
+/* ------------------------------------------------ */
+/* Mechanism Explanation */
+/* ------------------------------------------------ */
+
 export function generateMechanismExplanation(
   interaction: InteractionResult
 ): string {
-  const { mechanism } = interaction;
-  
-  if (!mechanism) {
-    return "The specific biological mechanism of this interaction is not fully documented.";
+  if (!interaction.mechanism) {
+    return "The exact biological mechanism of this interaction is not fully documented.";
   }
-  
-  const intro = "These medicines affect similar systems in your body. When taken together, they can amplify each other's effects. Here's the scientific explanation: ";
-  return intro + mechanism;
+
+  return `These medicines affect related biological systems. When used together they can amplify each other's effects. Scientific explanation: ${interaction.mechanism}`;
 }
 
-/**
- * Generate human-friendly explanations for side effects
- */
+/* ------------------------------------------------ */
+/* Side Effects */
+/* ------------------------------------------------ */
+
+const SIDE_EFFECT_REASONS: Record<string, string> = {
+  "Stomach irritation":
+    "because both medicines may irritate the stomach lining",
+  "Gastrointestinal bleeding":
+    "because the medicines thin the blood or irritate the digestive tract",
+  "Increased bleeding risk":
+    "due to reduced blood clotting ability when both medicines are present",
+  Dizziness:
+    "because the combination affects blood pressure or the nervous system",
+  Nausea:
+    "due to irritation of the digestive tract or nervous system response",
+  "Liver damage":
+    "because both medicines are processed by the liver",
+  "Kidney problems":
+    "because both medicines are filtered through the kidneys",
+  Drowsiness:
+    "because both medicines affect the central nervous system",
+};
+
 export function generateDetailedSideEffects(
   interaction: InteractionResult
 ): Array<{ effect: string; reason: string }> {
-  const { sideEffects, mechanism, drugA, drugB } = interaction;
-  
-  if (!sideEffects || sideEffects.length === 0) {
-    return [];
-  }
-  
-  const reasons: Record<string, string> = {
-    "Stomach irritation":
-      "because both medicines increase stomach acid or irritate the stomach lining",
-    "Gastrointestinal bleeding":
-      "because the medicines thin the blood or irritate the digestive tract",
-    "Increased bleeding risk":
-      "due to reduced blood clotting ability when both medicines are present",
-    "Nausea or dizziness":
-      "when both medicines affect the nervous system or inner ear",
-    "Liver damage":
-      "because both medicines are processed by the liver, increasing stress on this organ",
-    "Kidney problems":
-      "because both medicines are filtered through the kidneys, putting extra strain on them",
-    "Headache": "due to changes in blood pressure or nerve activity from the interaction",
-    "Dizziness":
-      "because the combination affects blood pressure regulation or inner ear function",
-    "Drowsiness": "when both medicines have sedative effects on the central nervous system",
-    "Increased heart rate":
-      "due to stimulant effects or changes in heart rhythm control",
-    "Low blood pressure":
-      "because both medicines lower blood vessel tone or heart function",
-    "High blood pressure":
-      "because the interaction may increase vasoconstriction or heart activity",
-    "Weakness or fatigue":
-      "due to reduced nutrient absorption or increased metabolic demands",
-    "Muscle pain": "due to reduced blood flow or changes in muscle metabolism",
-    "Rash or allergic reaction":
-      "because the combination may trigger an exaggerated immune response",
-  };
-  
-  return sideEffects.map((effect) => ({
-    effect: effect,
+  if (!interaction.sideEffects?.length) return [];
+
+  return interaction.sideEffects.map((effect) => ({
+    effect,
     reason:
-      reasons[effect] ||
-      `due to interaction between ${drugA} and ${drugB}`,
+      SIDE_EFFECT_REASONS[effect] ??
+      `due to interaction between ${interaction.drugA} and ${interaction.drugB}`,
   }));
 }
 
-/**
- * Generate structured recommendation actions
- */
+/* ------------------------------------------------ */
+/* Recommendations */
+/* ------------------------------------------------ */
+
 export function generateRecommendationActions(
   interaction: InteractionResult
 ): string[] {
-  const { recommendation, severity, timeGap } = interaction;
   const actions: string[] = [];
-  
-  // Add severity-based recommendation
-  if (severity === "high") {
-    actions.push("Avoid taking both medicines together unless specifically advised by your doctor");
-    actions.push("Do not attempt to self-manage this interaction - seek immediate medical guidance");
-  } else if (severity === "medium") {
-    actions.push("Take these medicines at different times as recommended by your doctor");
-    actions.push("Monitor for any unusual symptoms or side effects");
-    actions.push("Report any concerns to your healthcare provider");
-  } else {
-    actions.push("These medicines can generally be used together with minimal risk");
-    actions.push("Follow your doctor's dosing instructions carefully");
+
+  switch (interaction.severity) {
+    case "high":
+      actions.push(
+        "Avoid taking both medicines together unless advised by a doctor",
+        "Seek professional medical advice before combining these medicines"
+      );
+      break;
+
+    case "medium":
+      actions.push(
+        "Take medicines at different times if advised",
+        "Monitor for unusual symptoms or side effects"
+      );
+      break;
+
+    default:
+      actions.push(
+        "These medicines usually have minimal interaction risk",
+        "Follow prescribed dosage instructions carefully"
+      );
   }
-  
-  // Add time gap recommendation
-  if (timeGap && !timeGap.toLowerCase().includes("same time")) {
-    actions.push(`Maintain the suggested time gap: ${timeGap}`);
+
+  if (interaction.timeGap) {
+    actions.push(`Maintain the suggested time gap: ${interaction.timeGap}`);
   }
-  
-  // Add monitoring advice
-  if (severity !== "low") {
-    actions.push("Watch for symptoms such as nausea, dizziness, stomach pain, or unusual bleeding");
+
+  if (interaction.recommendation) {
+    actions.push(interaction.recommendation);
   }
-  
-  // Add the original recommendation if it exists
-  if (recommendation && recommendation.length > 0) {
-    actions.push(recommendation);
-  }
-  
+
   return actions;
 }
 
-/**
- * Generate time gap explanation with context
- */
+/* ------------------------------------------------ */
+/* Time Gap Explanation */
+/* ------------------------------------------------ */
+
 export function generateTimeGapExplanation(
   interaction: InteractionResult
 ): string | null {
-  const { timeGap, drugA, drugB } = interaction;
-  
-  if (!timeGap) {
-    return null;
+  const gap = interaction.timeGap;
+
+  if (!gap) return null;
+
+  if (gap.includes("hours")) {
+    return `Spacing these medicines by ${gap} helps reduce overlapping effects inside the body.`;
   }
-  
-  const explanations: Record<string, string> = {
-    "2 hours":
-      "Spacing these medicines 2 hours apart allows your body to partially absorb the first medicine before the second one begins to work.",
-    "4 hours":
-      "A 4-hour gap gives your body enough time to start breaking down the first medicine before the second one is absorbed, reducing the overlap of their effects.",
-    "6 hours":
-      "Spacing these medicines 6 hours apart (typically morning and evening) minimizes the time both medicines are active in your body at the same time.",
-    "8 hours":
-      "An 8-hour gap provides substantial time for the first medicine to be processed by your liver and kidneys before the second medicine enters your system.",
-    "12 hours":
-      "These medicines should be taken at opposite ends of the day (morning and evening) to keep them as far apart as possible in your body.",
-    "morning and evening":
-      "Taking one medicine in the morning and the other in the evening provides maximum separation between doses.",
-    "do not take together":
-      "These medicines should never be taken at the same time. Space them as far apart as possible, ideally by at least 12 hours.",
-  };
-  
-  let explanation = explanations[timeGap.toLowerCase()];
-  
-  if (!explanation) {
-    // Try to find a matching pattern
-    if (timeGap.includes("hours")) {
-      explanation = `Space these medicines by at least ${timeGap} to reduce their interaction.`;
-    } else if (
-      timeGap.toLowerCase().includes("avoid") ||
-      timeGap.toLowerCase().includes("together")
-    ) {
-      explanation =
-        "These medicines should not be taken at the same time. Separate them as much as possible during the day.";
-    } else {
-      explanation = `Follow this dosing schedule: ${timeGap}`;
-    }
+
+  if (gap.toLowerCase().includes("avoid")) {
+    return "These medicines should not be taken together at the same time.";
   }
-  
-  return explanation;
+
+  return `Follow this recommended timing: ${gap}`;
 }
 
-/**
- * Generate explanation for confidence score
- */
+/* ------------------------------------------------ */
+/* Confidence Explanation */
+/* ------------------------------------------------ */
+
 export function getConfidenceExplanation(confidence: number): string {
-  if (confidence >= 90) {
-    return "Very High - This interaction is well-documented in medical literature and extensively studied.";
-  } else if (confidence >= 75) {
-    return "High - This interaction has strong clinical evidence and is widely recognized by healthcare providers.";
-  } else if (confidence >= 60) {
-    return "Moderate - This interaction is documented but may have limited clinical data or rare occurrences.";
-  } else if (confidence >= 45) {
-    return "Fair - This interaction has some evidence but requires further clinical confirmation.";
-  } else {
-    return "Low - This interaction is poorly documented; consult with a healthcare provider for personalized advice.";
-  }
+  if (confidence >= 90) return "Very high clinical evidence.";
+  if (confidence >= 75) return "Strong clinical evidence.";
+  if (confidence >= 60) return "Moderate medical documentation.";
+  if (confidence >= 45) return "Limited clinical evidence.";
+  return "Low evidence – consult a healthcare professional.";
 }
 
-/**
- * Generate explanation for dynamic risk rating
- */
+/* ------------------------------------------------ */
+/* Risk Score Explanation */
+/* ------------------------------------------------ */
+
 export function getRiskScoreExplanation(score: number): string {
-  if (score >= 8) {
-    return "Very High Risk - Dangerous interaction. These medicines should not be combined without close medical supervision.";
-  } else if (score >= 7) {
-    return "High Risk - Significant interaction. There is a high probability of clinically significant side effects.";
-  } else if (score >= 5) {
-    return "Moderate Risk - Notable interaction. Monitor closely for side effects and maintain proper dosing intervals.";
-  } else if (score >= 3) {
-    return "Low-Moderate Risk - Mild interaction. Usually manageable with proper spacing and monitoring.";
-  } else {
-    return "Low Risk - Minimal interaction. These medicines are generally safe to use together, but follow medical guidance.";
-  }
+  if (score >= 8) return "Very high risk interaction.";
+  if (score >= 7) return "High risk interaction.";
+  if (score >= 5) return "Moderate interaction risk.";
+  if (score >= 3) return "Low-moderate interaction risk.";
+  return "Minimal interaction risk.";
 }
 
-/**
- * Format alternatives with better structure
- */
+/* ------------------------------------------------ */
+/* Alternatives */
+/* ------------------------------------------------ */
+
 export function formatAlternativesForDisplay(
   interaction: InteractionResult
-): Array<{
-  drugName: string;
-  alternatives: Array<{ drug: string; reason: string }>;
-}> {
-  if (interaction.alternativesByDrug && interaction.alternativesByDrug.length > 0) {
+) {
+  if (interaction.alternativesByDrug?.length) {
     return interaction.alternativesByDrug;
   }
-  
-  if (interaction.alternatives && interaction.alternatives.length > 0) {
-    // Convert simple alternatives to structured format
-    return interaction.alternatives.map((alt) => ({
-      drugName: alt.includes(" instead of ") ? alt.split(" instead of ")[1] : "Standard medication",
-      alternatives: [
-        {
-          drug: alt.replace(" instead of ", ""),
-          reason: "A safer alternative with fewer interaction risks",
-        },
-      ],
-    }));
-  }
-  
-  return [];
+
+  if (!interaction.alternatives?.length) return [];
+
+  return interaction.alternatives.map((alt) => ({
+    drugName: "Alternative medication",
+    alternatives: [
+      {
+        drug: alt,
+        reason: "May reduce interaction risk",
+      },
+    ],
+  }));
 }
 
-/**
- * Get severity color classes
- */
-export function getSeverityColors(severity: string): {
-  label: string;
-  description: string;
-  textColor: string;
-  bgColor: string;
-  borderColor: string;
-} {
-  const colors: Record<
-    string,
-    {
-      label: string;
-      description: string;
-      textColor: string;
-      bgColor: string;
-      borderColor: string;
-    }
-  > = {
+/* ------------------------------------------------ */
+/* Severity Colors */
+/* ------------------------------------------------ */
+
+export function getSeverityColors(severity: Severity) {
+  const map = {
     high: {
       label: "High Risk",
       description: "Dangerous interaction",
@@ -334,5 +255,5 @@ export function getSeverityColors(severity: string): {
     },
   };
 
-  return colors[severity] || colors.low;
+  return map[severity];
 }

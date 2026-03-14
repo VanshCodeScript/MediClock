@@ -7,7 +7,7 @@ import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 import { api } from "@/lib/api";
 
-type PatientRecord = {
+interface PatientRecord {
   _id?: string;
   name?: string;
   age?: number;
@@ -360,8 +360,20 @@ const DoctorQRScannerPage = () => {
         setError("Patient record not found.");
         return;
       }
-      setPatient(user);
-    } catch {
+
+      // Combine all data into comprehensive record
+      const fullRecord: PatientFullRecord = {
+        ...userRes,
+        medications: Array.isArray(medsRes) ? medsRes : [],
+        healthMetrics: metricsRes || undefined,
+        sleepData: sleepRes || undefined,
+        circadianProfile: circadianRes || undefined,
+        emergencyContact: contactsRes || undefined,
+      };
+
+      setPatient(fullRecord);
+    } catch (err) {
+      console.error("Error scanning QR:", err);
       setError("Unable to fetch patient details.");
     } finally {
       setLoading(false);
@@ -639,7 +651,7 @@ const DoctorQRScannerPage = () => {
 
   return (
     <PageTransition>
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="max-w-6xl mx-auto space-y-6">
         <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-6 space-y-4">
           <div className="flex items-center gap-2">
             <QrCode className="w-5 h-5 text-primary" />
@@ -1039,9 +1051,9 @@ const DoctorQRScannerPage = () => {
             <div className="flex items-center gap-3 pt-4 border-t flex-wrap">
               <button
                 onClick={openConsultation}
-                className="px-4 py-2.5 rounded-xl gradient-blue text-primary-foreground text-sm font-medium inline-flex items-center gap-2"
+                className="w-full md:w-auto px-6 py-3 rounded-xl gradient-blue text-primary-foreground font-medium inline-flex items-center justify-center gap-2"
               >
-                <PhoneCall className="w-4 h-4" /> Open Video Consultation
+                <PhoneCall className="w-4 h-4" /> Start Video Consultation
               </button>
               <button
                 onClick={downloadPatientPDF}
