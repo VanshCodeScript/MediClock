@@ -1,5 +1,6 @@
 /**
- * Service for checking drug-drug interactions
+ * Drug Interaction Service
+ * Handles communication with backend API
  */
 
 export interface Alternative {
@@ -23,92 +24,145 @@ export interface InteractionResult {
   timeGap?: string;
   confidence?: number;
   alternatives?: string[];
-  dynamicRiskRating?: number;  // 0-10 numeric score
-  alternativesByDrug?: AlternativeGroup[];  // Structured alternatives per drug
+  dynamicRiskRating?: number;
+  alternativesByDrug?: AlternativeGroup[];
 }
 
 export interface InteractionCheckResponse {
   interactions: InteractionResult[];
 }
 
-const API_BASE_URL = "http://localhost:8000";
+/* ------------------------------------------------ */
+/* API Config */
+/* ------------------------------------------------ */
 
-/**
- * Check for drug interactions
- */
-export async function checkDrugInteractions(drugs: string[]): Promise<InteractionResult[]> {
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL || "http://localhost:8000";
+
+const REQUEST_TIMEOUT = 8000;
+
+/* ------------------------------------------------ */
+/* Generic Fetch Helper */
+/* ------------------------------------------------ */
+
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit = {}
+) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+
   try {
-    const response = await fetch(`${API_BASE_URL}/interactions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ drugs }),
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
     });
 
+    clearTimeout(id);
+
     if (!response.ok) {
-      throw new Error(`API error: ${response.statusText}`);
+      throw new Error(
+        `API Error (${response.status}) ${response.statusText}`
+      );
     }
 
-    const data: InteractionCheckResponse = await response.json();
-    return data.interactions;
-  } catch (error) {
-    console.error("Error checking drug interactions:", error);
+    return await response.json();
+  } catch (error: any) {
+    clearTimeout(id);
+
+    if (error.name === "AbortError") {
+      throw new Error("Request timed out. Backend may be slow.");
+    }
+
     throw error;
   }
 }
 
-/**
- * Get list of all available drugs
- */
+/* ------------------------------------------------ */
+/* Check Drug Interactions */
+/* ------------------------------------------------ */
+
+export async function checkDrugInteractions(
+  drugs: string[]
+): Promise<InteractionResult[]> {
+  if (!drugs || drugs.length < 2) {
+    throw new Error("At least two drugs required.");
+  }
+
+  try {
+    const data: InteractionCheckResponse =
+      await fetchWithTimeout(`${API_BASE_URL}/interactions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ drugs }),
+      });
+
+    return data?.interactions ?? [];
+  } catch (error) {
+    console.error("Drug interaction check failed:", error);
+    throw error;
+  }
+}
+
+/* ------------------------------------------------ */
+/* Fetch Available Drugs */
+/* ------------------------------------------------ */
+
 export async function getDrugsList(): Promise<string[]> {
   try {
-    const response = await fetch(`${API_BASE_URL}/drugs`);
+    const data = await fetchWithTimeout(`${API_BASE_URL}/drugs`);
 
-    if (!response.ok) {
-      throw new Error(`API error: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    return data.drugs;
+    return data?.drugs ?? [];
   } catch (error) {
-    console.error("Error fetching drugs list:", error);
-    throw error;
+    console.error("Failed to fetch drug list:", error);
+    return [];
   }
 }
 
-/**
- * Get severity-based risk score
- */
+/* ------------------------------------------------ */
+/* Risk Scoring */
+/* ------------------------------------------------ */
+
 export function getRiskScore(severity: string): number {
   const scores: Record<string, number> = {
     high: 3,
     medium: 2,
     low: 1,
   };
-  return scores[severity] || 1;
+
+  return scores[severity] ?? 1;
 }
 
-/**
- * Calculate overall risk from multiple interactions
- */
-export function calculateOverallRisk(interactions: InteractionResult[]): string {
-  if (interactions.length === 0) return "none";
+export function calculateOverallRisk(
+  interactions: InteractionResult[]
+): "none" | "low" | "medium" | "high" {
+  if (!interactions || interactions.length === 0) {
+    return "none";
+  }
 
-  const scores = interactions.map(i => getRiskScore(i.severity));
-  const avgScore = scores.reduce((a, b) => a + b, 0) / scores.length;
+  const scores = interactions.map((i) => getRiskScore(i.severity));
 
-  if (avgScore >= 2.5) return "high";
-  if (avgScore >= 1.5) return "medium";
+  const avg =
+    scores.reduce((a, b) => a + b, 0) / scores.length;
+
+  if (avg >= 2.5) return "high";
+  if (avg >= 1.5) return "medium";
   return "low";
 }
 
-/**
- * Health check
- */
+/* ------------------------------------------------ */
+/* API Health Check */
+/* ------------------------------------------------ */
+
 export async function healthCheck(): Promise<boolean> {
   try {
-    const response = await fetch(`${API_BASE_URL}/health`);
+    const response = await fetch(`${API_BASE_URL}/health`, {
+      method: "GET",
+      cache: "no-store",
+    });
+
     return response.ok;
   } catch {
     return false;

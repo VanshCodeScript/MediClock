@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { X, Search, Loader } from "lucide-react";
 import { getDrugsList } from "@/services/interactionService";
@@ -21,7 +21,12 @@ export const DrugSelector = ({
   const [isOpen, setIsOpen] = useState(false);
   const [isLoadingDrugs, setIsLoadingDrugs] = useState(true);
 
-  // Load available drugs on mount
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  /* ---------------------------------- */
+  /* Load Drug List */
+  /* ---------------------------------- */
+
   useEffect(() => {
     const loadDrugs = async () => {
       try {
@@ -38,14 +43,44 @@ export const DrugSelector = ({
     loadDrugs();
   }, []);
 
-  // Filter drugs based on search term
+  /* ---------------------------------- */
+  /* Close dropdown when clicking outside */
+  /* ---------------------------------- */
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(event.target as Node)
+      ) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  /* ---------------------------------- */
+  /* Filter Drugs */
+  /* ---------------------------------- */
+
   const filteredDrugs = drugsList.filter(
     (drug) =>
       drug.toLowerCase().includes(searchTerm.toLowerCase()) &&
       !selectedDrugs.includes(drug)
   );
 
+  /* ---------------------------------- */
+  /* Handlers */
+  /* ---------------------------------- */
+
   const handleAddDrug = (drug: string) => {
+    if (selectedDrugs.includes(drug)) return;
+
     onDrugsChange([...selectedDrugs, drug]);
     setSearchTerm("");
     setIsOpen(false);
@@ -55,38 +90,55 @@ export const DrugSelector = ({
     onDrugsChange(selectedDrugs.filter((d) => d !== drug));
   };
 
+  /* ---------------------------------- */
+  /* Render */
+  /* ---------------------------------- */
+
   return (
     <motion.div
+      ref={containerRef}
       initial={{ opacity: 0, y: -20 }}
       animate={{ opacity: 1, y: 0 }}
       className="glass-card p-6 space-y-4"
     >
       <div className="space-y-3">
-        <label className="block text-sm font-medium">Select Medicines</label>
+        <label className="block text-sm font-medium">
+          Select Medicines
+        </label>
 
-        {/* Drug input with search */}
+        {/* Search Input */}
+
         <div className="relative">
           <div className="flex gap-2">
             <div className="flex-1 relative">
               <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
                 <Search className="w-4 h-4 text-muted-foreground" />
               </div>
+
               <input
                 type="text"
-                placeholder="Search and select medicines..."
+                placeholder={
+                  isLoading
+                    ? "Checking interactions..."
+                    : "Search and select medicines..."
+                }
                 value={searchTerm}
+                disabled={isLoading}
                 onChange={(e) => {
                   setSearchTerm(e.target.value);
-                  setIsOpen(true);
+                  if (!isLoading) setIsOpen(true);
                 }}
-                onFocus={() => setIsOpen(true)}
-                className="w-full pl-10 pr-4 py-2 rounded-xl bg-muted border-0 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                onFocus={() => {
+                  if (!isLoading) setIsOpen(true);
+                }}
+                className="w-full pl-10 pr-4 py-2 rounded-xl bg-muted border-0 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
               />
             </div>
           </div>
 
-          {/* Dropdown menu */}
-          {isOpen && searchTerm && (
+          {/* Dropdown */}
+
+          {isOpen && searchTerm && !isLoading && (
             <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -117,12 +169,14 @@ export const DrugSelector = ({
         </div>
       </div>
 
-      {/* Selected drugs */}
+      {/* Selected Drugs */}
+
       {selectedDrugs.length > 0 && (
         <div className="space-y-2">
           <label className="block text-xs font-medium text-muted-foreground">
             Selected ({selectedDrugs.length})
           </label>
+
           <div className="flex flex-wrap gap-2">
             {selectedDrugs.map((drug) => (
               <motion.div
@@ -132,8 +186,10 @@ export const DrugSelector = ({
                 className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-accent/70 text-sm font-medium"
               >
                 {drug}
+
                 <button
                   onClick={() => handleRemoveDrug(drug)}
+                  disabled={isLoading}
                   className="hover:text-destructive transition-colors"
                 >
                   <X className="w-4 h-4" />
@@ -144,18 +200,27 @@ export const DrugSelector = ({
         </div>
       )}
 
-      {/* Check button */}
+      {/* Check Button */}
+
       <button
         onClick={onCheck}
         disabled={selectedDrugs.length < 2 || isLoading}
         className="w-full px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
       >
-        {isLoading && <Loader className="w-4 h-4 animate-spin" />}
-        Check Interactions
-        {selectedDrugs.length >= 2 && (
-          <span className="text-xs bg-white/20 px-2 py-0.5 rounded-md">
-            {selectedDrugs.length} drugs
-          </span>
+        {isLoading ? (
+          <>
+            <Loader className="w-4 h-4 animate-spin" />
+            Analyzing Interactions...
+          </>
+        ) : (
+          <>
+            Check Interactions
+            {selectedDrugs.length >= 2 && (
+              <span className="text-xs bg-white/20 px-2 py-0.5 rounded-md">
+                {selectedDrugs.length} drugs
+              </span>
+            )}
+          </>
         )}
       </button>
 
