@@ -1,7 +1,8 @@
-import { Outlet } from "react-router-dom";
+import { Outlet, useNavigate } from "react-router-dom";
 import AppSidebar from "@/components/AppSidebar";
 import TopNav from "@/components/TopNav";
 import { useLocation } from "react-router-dom";
+import { useEffect } from "react";
 
 const pageTitles: Record<string, string> = {
   "/dashboard": "Dashboard",
@@ -23,7 +24,15 @@ const pageTitles: Record<string, string> = {
 
 const DashboardLayout = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const title = pageTitles[location.pathname] || "MediClock";
+
+  useEffect(() => {
+    const token = localStorage.getItem("mediclock_token");
+    if (!token) {
+      navigate("/login", { replace: true });
+    }
+  }, [navigate]);
 
   return (
     <div className="flex min-h-screen w-full">

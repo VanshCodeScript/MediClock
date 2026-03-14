@@ -1,8 +1,46 @@
 // API service for connecting frontend to backend
-const API_BASE_URL = 'http://localhost:5001/api';
+const API_BASE_URL = 'http://localhost:5000/api';
+
+const authHeaders = () => {
+  const token = localStorage.getItem('mediclock_token');
+  return token
+    ? { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
+    : { 'Content-Type': 'application/json' };
+};
 
 // Create axios-like fetch wrapper
 export const api = {
+  // Auth
+  auth: {
+    register: async (userData: { name: string; email: string; password: string; age?: number; gender?: string; phone?: string }) => {
+      const response = await fetch(`${API_BASE_URL}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(userData),
+      });
+      return response.json();
+    },
+    login: async (credentials: { email: string; password: string }) => {
+      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(credentials),
+      });
+      return response.json();
+    },
+    me: async () => {
+      const response = await fetch(`${API_BASE_URL}/auth/me`, {
+        headers: authHeaders(),
+      });
+      return response.json();
+    },
+    logout: () => {
+      localStorage.removeItem('mediclock_token');
+      localStorage.removeItem('mediclock_user');
+      localStorage.removeItem('mediclock_user_id');
+    },
+  },
+
   // Users
   users: {
     create: async (userData) => {

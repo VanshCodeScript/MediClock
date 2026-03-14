@@ -23,6 +23,10 @@ const userSchema = new mongoose.Schema(
     age: {
       type: Number,
     },
+    gender: {
+      type: String,
+      enum: ['Male', 'Female', 'Other'],
+    },
     sleepSchedule: {
       wakeTime: String,
       sleepTime: String,

@@ -17,9 +17,11 @@ import circadianRhythmRouter from './routes/circadian-rhythm.js';
 import medicationAdherenceRouter from './routes/medication-adherence.js';
 import notificationsRouter from './routes/notifications.js';
 import nutritionRouter from './routes/nutrition.js';
+import authRouter from './routes/auth.js';
 import circadianProfileRouter from './routes/circadian-profile.js';
 import medicationSchedulerRouter from './routes/medication-scheduler.js';
 import circadianInsightsRouter from './routes/circadian-insights.js';
+import sosRouter from './routes/sos.js';
 
 console.log("🔑 Gemini API Key loaded:", process.env.GEMINI_API_KEY ? "YES" : "NO");
 
@@ -42,6 +44,9 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'Server is running', timestamp: new Date() });
 });
 
+// Auth Routes
+app.use('/api/auth', authRouter);
+
 // Core Routes
 app.use('/api/users', usersRouter);
 app.use('/api/medications', medicationsRouter);
@@ -56,6 +61,7 @@ app.use('/api/circadian-rhythm', circadianRhythmRouter);
 
 // Emergency & Safety Routes
 app.use('/api/emergency-contacts', emergencyContactsRouter);
+app.use('/api/sos', sosRouter);
 app.use('/api/qr-cards', qrCardsRouter);
 
 // Medical Routes

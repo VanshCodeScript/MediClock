@@ -1,11 +1,49 @@
 import { motion } from "framer-motion";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Activity, User, Stethoscope } from "lucide-react";
 import PageTransition from "@/components/PageTransition";
 import { useState } from "react";
 
+const API_BASE = "http://localhost:5000/api";
+
 const LoginPage = () => {
   const [role, setRole] = useState<"patient" | "doctor">("patient");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const navigate = useNavigate();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    try {
+      const res = await fetch(`${API_BASE}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || "Login failed. Please check your credentials.");
+        return;
+      }
+
+      localStorage.setItem("mediclock_token", data.token);
+      localStorage.setItem("mediclock_user", JSON.stringify(data.user));
+      localStorage.setItem("mediclock_user_id", data.user._id);
+
+      navigate(data.user.role === "doctor" ? "/doctor-dashboard" : "/dashboard");
+    } catch {
+      setError("Unable to connect to server. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <PageTransition className="min-h-screen flex">
@@ -56,6 +94,7 @@ const LoginPage = () => {
             ].map((r) => (
               <motion.button
                 key={r.key}
+                type="button"
                 whileTap={{ scale: 0.97 }}
                 onClick={() => setRole(r.key)}
                 className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-medium text-sm transition-all ${
@@ -70,12 +109,20 @@ const LoginPage = () => {
             ))}
           </div>
 
-          <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
+          <form className="space-y-4" onSubmit={handleSubmit}>
+            {error && (
+              <div className="px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-sm">
+                {error}
+              </div>
+            )}
             <div>
               <label className="text-sm font-medium mb-1.5 block">Email</label>
               <input
                 type="email"
                 placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
                 className="w-full px-4 py-3 rounded-xl bg-muted border border-border focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm"
               />
             </div>
@@ -84,18 +131,21 @@ const LoginPage = () => {
               <input
                 type="password"
                 placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
                 className="w-full px-4 py-3 rounded-xl bg-muted border border-border focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm"
               />
             </div>
-            <Link to={role === "doctor" ? "/doctor-dashboard" : "/dashboard"}>
-              <motion.button
-                whileHover={{ scale: 1.01 }}
-                whileTap={{ scale: 0.99 }}
-                className="w-full py-3.5 gradient-blue text-primary-foreground rounded-xl font-semibold text-sm mt-2"
-              >
-                Sign In as {role === "doctor" ? "Doctor" : "Patient"}
-              </motion.button>
-            </Link>
+            <motion.button
+              type="submit"
+              disabled={loading}
+              whileHover={{ scale: loading ? 1 : 1.01 }}
+              whileTap={{ scale: loading ? 1 : 0.99 }}
+              className="w-full py-3.5 gradient-blue text-primary-foreground rounded-xl font-semibold text-sm mt-2 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {loading ? "Signing in…" : `Sign In as ${role === "doctor" ? "Doctor" : "Patient"}`}
+            </motion.button>
           </form>
 
           <p className="text-center text-sm text-muted-foreground mt-6">
