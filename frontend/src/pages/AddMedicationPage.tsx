@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import PageTransition from "@/components/PageTransition";
-import { Clock, Pill, Plus } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Camera, Clock, Loader2, Pill, Plus, Sparkles, Upload } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { getOrCreateCurrentUserId } from "@/lib/userSession";
 
@@ -10,6 +10,34 @@ const DEFAULT_TIMES: Record<string, string[]> = {
   "twice daily": ["08:00", "20:00"],
   "three times daily": ["08:00", "14:00", "20:00"],
   "as needed": [],
+};
+
+type MedicationFrequency = "once daily" | "twice daily" | "three times daily" | "as needed";
+type MedicationFoodRule = "before food" | "after food" | "with food" | "empty stomach" | "none";
+
+interface OcrMedication {
+  name: string;
+  dosage: string;
+  frequency: string;
+  foodRule: string;
+  reason: string;
+}
+
+const normalizeFrequency = (value: string): MedicationFrequency => {
+  const v = String(value || "").toLowerCase();
+  if (v.includes("three") || v.includes("thrice") || v.includes("3")) return "three times daily";
+  if (v.includes("twice") || v.includes("2")) return "twice daily";
+  if (v.includes("need") || v.includes("prn")) return "as needed";
+  return "once daily";
+};
+
+const normalizeFoodRule = (value: string): MedicationFoodRule => {
+  const v = String(value || "").toLowerCase();
+  if (v.includes("before")) return "before food";
+  if (v.includes("after")) return "after food";
+  if (v.includes("with")) return "with food";
+  if (v.includes("empty")) return "empty stomach";
+  return "none";
 };
 
 const AddMedicationPage = () => {
@@ -26,6 +54,19 @@ const AddMedicationPage = () => {
     disease: "",
   });
   const [reminderTimes, setReminderTimes] = useState<string[]>(["08:00"]);
+  const [prescriptionPreview, setPrescriptionPreview] = useState<string | null>(null);
+  const [prescriptionFile, setPrescriptionFile] = useState<File | null>(null);
+  const [ocrLoading, setOcrLoading] = useState(false);
+  const [ocrError, setOcrError] = useState<string | null>(null);
+  const [ocrNotes, setOcrNotes] = useState<string>("");
+  const [ocrMeds, setOcrMeds] = useState<OcrMedication[]>([]);
+  const [cameraStarting, setCameraStarting] = useState(false);
+  const [showCamera, setShowCamera] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
   const foodRuleLabelMap: Record<string, string> = {
     "before food": "Before Meal",
@@ -40,6 +81,21 @@ const AddMedicationPage = () => {
     setForm((f) => ({ ...f, frequency: freq }));
     setReminderTimes(DEFAULT_TIMES[freq] ?? []);
   };
+
+  const fillFormFromOcr = useCallback((med: OcrMedication) => {
+    const frequency = normalizeFrequency(med.frequency);
+    const foodRule = normalizeFoodRule(med.foodRule);
+
+    setForm((f) => ({
+      ...f,
+      name: String(med.name || "").trim(),
+      dosage: String(med.dosage || "").trim(),
+      frequency,
+      meal: foodRule,
+      disease: String(med.reason || "").trim(),
+    }));
+    setReminderTimes(DEFAULT_TIMES[frequency] ?? []);
+  }, []);
 
   const updateTime = (index: number, value: string) => {
     setReminderTimes((prev) => prev.map((t, i) => (i === index ? value : t)));
@@ -71,6 +127,145 @@ const AddMedicationPage = () => {
 
     init();
   }, []);
+
+  const stopCamera = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+  }, []);
+
+  const openCamera = useCallback(async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError("Camera not supported in this browser.");
+      return;
+    }
+
+    try {
+      setCameraStarting(true);
+      setCameraError(null);
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
+      });
+      streamRef.current = stream;
+      setShowCamera(true);
+
+      requestAnimationFrame(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          void videoRef.current.play();
+        }
+      });
+    } catch {
+      setCameraError("Unable to access camera. Please allow permission or upload image.");
+      stopCamera();
+    } finally {
+      setCameraStarting(false);
+    }
+  }, [stopCamera]);
+
+  const closeCamera = useCallback(() => {
+    setShowCamera(false);
+    stopCamera();
+  }, [stopCamera]);
+
+  const handlePrescriptionSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setPrescriptionFile(file);
+    setOcrError(null);
+    setOcrNotes("");
+    setOcrMeds([]);
+    const reader = new FileReader();
+    reader.onload = (ev) => setPrescriptionPreview(ev.target?.result as string);
+    reader.readAsDataURL(file);
+  }, []);
+
+  const capturePrescriptionFromCamera = useCallback(async () => {
+    if (!videoRef.current) {
+      setCameraError("Camera preview is not ready.");
+      return;
+    }
+
+    const video = videoRef.current;
+    const width = video.videoWidth || 1280;
+    const height = video.videoHeight || 720;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      setCameraError("Failed to capture image. Try again.");
+      return;
+    }
+
+    ctx.drawImage(video, 0, 0, width, height);
+
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(resolve, "image/jpeg", 0.92);
+    });
+
+    if (!blob) {
+      setCameraError("Failed to process captured image.");
+      return;
+    }
+
+    const file = new File([blob], `prescription-${Date.now()}.jpg`, { type: "image/jpeg" });
+    setPrescriptionFile(file);
+    setPrescriptionPreview(canvas.toDataURL("image/jpeg", 0.92));
+    setOcrError(null);
+    setOcrNotes("");
+    setOcrMeds([]);
+    closeCamera();
+  }, [closeCamera]);
+
+  const clearPrescription = useCallback(() => {
+    setPrescriptionPreview(null);
+    setPrescriptionFile(null);
+    setOcrError(null);
+    setOcrNotes("");
+    setOcrMeds([]);
+  }, []);
+
+  const analyzePrescription = useCallback(async () => {
+    if (!prescriptionFile) return;
+
+    try {
+      setOcrLoading(true);
+      setOcrError(null);
+      const data = await api.nutrition.analyzePrescription(prescriptionFile);
+
+      if (data?.error) {
+        throw new Error(data.error || "Prescription OCR failed");
+      }
+
+      const meds = Array.isArray(data?.medications) ? data.medications : [];
+      setOcrMeds(meds);
+      setOcrNotes(String(data?.notes || "").trim());
+
+      if (meds.length > 0) {
+        fillFormFromOcr(meds[0]);
+      } else {
+        setOcrError("No medications could be extracted from this image.");
+      }
+    } catch (err: any) {
+      setOcrError(err?.message || "Failed to analyze prescription image.");
+    } finally {
+      setOcrLoading(false);
+    }
+  }, [prescriptionFile, fillFormFromOcr]);
+
+  useEffect(() => {
+    return () => {
+      stopCamera();
+    };
+  }, [stopCamera]);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -121,6 +316,108 @@ const AddMedicationPage = () => {
         {error && (
           <div className="glass-card p-4 border-l-4 border-red-400 bg-red-50/50 text-red-700 text-sm">{error}</div>
         )}
+
+        <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-6">
+          <h3 className="font-display font-semibold text-base mb-2 flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-primary" /> Prescription OCR Auto-Fill
+          </h3>
+          <p className="text-sm text-muted-foreground mb-4">
+            Upload or click a prescription image. AI will extract medicine details and auto-fill the form below.
+          </p>
+
+          {!prescriptionPreview ? (
+            <div className="border-2 border-dashed border-border rounded-2xl p-6 bg-muted/30 flex flex-col items-center gap-3">
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-4 py-2.5 gradient-blue text-primary-foreground rounded-xl text-sm font-medium flex items-center gap-2"
+                >
+                  <Upload className="w-4 h-4" /> Upload Prescription
+                </button>
+                <button
+                  type="button"
+                  onClick={openCamera}
+                  disabled={cameraStarting}
+                  className="px-4 py-2.5 bg-card border border-border rounded-xl text-sm font-medium flex items-center gap-2 hover:border-primary/30"
+                >
+                  <Camera className="w-4 h-4" /> {cameraStarting ? "Opening..." : "Click Picture"}
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground">JPG/PNG up to 10MB</p>
+              {cameraError && <p className="text-xs text-red-600">{cameraError}</p>}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="relative rounded-2xl overflow-hidden bg-muted">
+                <img src={prescriptionPreview} alt="Prescription preview" className="w-full max-h-[260px] object-contain" />
+                <button
+                  type="button"
+                  onClick={clearPrescription}
+                  className="absolute top-2 right-2 w-7 h-7 rounded-full bg-card/80 flex items-center justify-center text-xs font-bold"
+                >
+                  ✕
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={analyzePrescription}
+                disabled={ocrLoading}
+                className="w-full py-3 gradient-blue text-primary-foreground rounded-xl text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-60"
+              >
+                {ocrLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                {ocrLoading ? "Analyzing Prescription..." : "Analyze & Auto-Fill"}
+              </button>
+            </div>
+          )}
+
+          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handlePrescriptionSelect} />
+
+          {ocrError && <p className="text-sm text-red-600 mt-3">{ocrError}</p>}
+          {ocrNotes && <p className="text-xs text-muted-foreground mt-2">LLM note: {ocrNotes}</p>}
+
+          {ocrMeds.length > 1 && (
+            <div className="mt-3 space-y-2">
+              <p className="text-xs text-muted-foreground">Multiple medicines detected. Click one to fill form:</p>
+              <div className="flex flex-wrap gap-2">
+                {ocrMeds.map((m, idx) => (
+                  <button
+                    key={`${m.name}-${idx}`}
+                    type="button"
+                    onClick={() => fillFormFromOcr(m)}
+                    className="px-3 py-1.5 text-xs rounded-lg border border-border bg-card hover:border-primary/40"
+                  >
+                    {m.name || `Medication ${idx + 1}`}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {showCamera && (
+            <div className="mt-4 space-y-3">
+              <div className="rounded-2xl overflow-hidden bg-black/80">
+                <video ref={videoRef} className="w-full max-h-[300px] object-contain" playsInline muted />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={capturePrescriptionFromCamera}
+                  className="flex-1 py-2.5 rounded-xl gradient-blue text-primary-foreground text-sm font-semibold"
+                >
+                  Capture
+                </button>
+                <button
+                  type="button"
+                  onClick={closeCamera}
+                  className="px-4 py-2.5 rounded-xl border border-border text-sm font-medium"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </motion.div>
 
         <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-6">
           <h2 className="font-display font-semibold text-lg mb-6 flex items-center gap-2">
