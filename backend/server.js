@@ -68,7 +68,11 @@ const io = new SocketIOServer(httpServer, {
     origin: allowedOrigins,
     credentials: true,
   },
+  transports: ['websocket', 'polling'],
 });
+
+// Track connected users by userId
+const connectedUsers = {};
 
 // Middleware
 app.use(express.json());
@@ -86,7 +90,8 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'Server is running', timestamp: new Date() });
 });
 
-registerCallSignaling(io);
+// Pass connectedUsers to socket signaling
+registerCallSignaling(io, connectedUsers);
 
 // Auth Routes
 app.use('/api/auth', authRouter);
@@ -134,9 +139,11 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error', message: err.message });
 });
 
-// Start server
-httpServer.listen(PORT, () => {
+// Start server - listen on all interfaces for LAN connectivity
+httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
+  console.log(`🌐 LAN Access: http://10.0.8.185:${PORT}`);
   console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
+  console.log(`📋 Connected users: 0`);
   startReminderAutomation();
 });

@@ -28,8 +28,22 @@ const medicationSchema = new mongoose.Schema(
     reason: String,
     sideEffects: [String],
     interactions: [String],
-    prescribedDate: Date,
-    endDate: Date,
+    prescribedDate: {
+      type: Date,
+      default: Date.now,
+    },
+    endDate: {
+      type: Date,
+      validate: {
+        validator(value) {
+          if (!value) return true;
+          const prescribed = this.prescribedDate ? new Date(this.prescribedDate) : null;
+          if (!prescribed) return true;
+          return new Date(value) >= prescribed;
+        },
+        message: 'endDate must be on or after prescribedDate',
+      },
+    },
     status: {
       type: String,
       enum: ['active', 'inactive', 'completed'],
@@ -44,5 +58,7 @@ const medicationSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+medicationSchema.index({ userId: 1, status: 1, prescribedDate: 1, endDate: 1 });
 
 export default mongoose.model('Medication', medicationSchema);

@@ -1,5 +1,18 @@
 // API service for connecting frontend to backend
-const API_BASE_URL = 'http://localhost:5001/api';
+const getApiBaseUrl = () => {
+  const envBase = import.meta.env.VITE_API_BASE_URL;
+  if (envBase) {
+    return String(envBase).replace(/\/$/, '');
+  }
+
+  if (typeof window !== 'undefined') {
+    return `${window.location.protocol}//${window.location.hostname}:5001/api`;
+  }
+
+  return 'http://localhost:5001/api';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 const authHeaders = () => {
   const token = localStorage.getItem('mediclock_token');
@@ -211,6 +224,21 @@ export const api = {
       const response = await fetch(`${API_BASE_URL}/meals/${mealId}`, {
         method: 'DELETE',
       });
+      return response.json();
+    },
+  },
+
+  // Nutrition / OCR
+  nutrition: {
+    analyzePrescription: async (file: File) => {
+      const formData = new FormData();
+      formData.append('image', file);
+
+      const response = await fetch(`${API_BASE_URL}/nutrition/analyze-prescription`, {
+        method: 'POST',
+        body: formData,
+      });
+
       return response.json();
     },
   },

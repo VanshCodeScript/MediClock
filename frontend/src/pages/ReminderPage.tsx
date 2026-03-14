@@ -3,8 +3,7 @@ import PageTransition from "@/components/PageTransition";
 import { Bell, Clock, MessageSquare, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getOrCreateCurrentUserId } from "@/lib/userSession";
-
-const API_BASE = "http://localhost:5001/api";
+import { api } from "@/lib/api";
 
 interface ReminderItem {
   _id: string;
@@ -23,6 +22,7 @@ const statusStyles: Record<string, string> = {
 const ReminderPage = () => {
   const [reminders, setReminders] = useState<ReminderItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [markingId, setMarkingId] = useState<string | null>(null);
   const [error, setError] = useState("");
 
   const fetchReminders = async () => {
@@ -30,9 +30,7 @@ const ReminderPage = () => {
       setLoading(true);
       setError("");
       const userId = await getOrCreateCurrentUserId();
-      const res = await fetch(`${API_BASE}/reminders/today/${userId}`);
-      if (!res.ok) throw new Error("Failed to fetch reminders");
-      const data = await res.json();
+      const data = await api.reminders.today(userId);
       setReminders(Array.isArray(data) ? data : []);
     } catch (e: any) {
       setError(e.message || "Failed to load reminders");
@@ -43,12 +41,19 @@ const ReminderPage = () => {
 
   const markTaken = async (id: string) => {
     try {
-      await fetch(`${API_BASE}/reminders/${id}/complete`, { method: "PATCH" });
-      setReminders((prev) =>
-        prev.map((r) => (r._id === id ? { ...r, status: "taken" } : r))
-      );
-    } catch {
-      // silent fail — UI already updated optimistically
+      setMarkingId(id);
+      setError("");
+      const response = await api.reminders.complete(id);
+      if (response?.error) {
+        throw new Error(response.error || "Failed to mark reminder as taken");
+      }
+
+      // Re-sync from backend so dashboard/reminder statuses stay consistent.
+      await fetchReminders();
+    } catch (e: any) {
+      setError(e?.message || "Failed to mark reminder as taken");
+    } finally {
+      setMarkingId(null);
     }
   };
 
@@ -125,9 +130,10 @@ const ReminderPage = () => {
                     {r.status === "pending" && (
                       <button
                         onClick={() => markTaken(r._id)}
-                        className="text-xs px-3 py-1.5 rounded-lg bg-primary text-primary-foreground font-medium hover:opacity-90 transition-opacity"
+                        disabled={markingId === r._id}
+                        className="text-xs px-3 py-1.5 rounded-lg bg-primary text-primary-foreground font-medium hover:opacity-90 transition-opacity disabled:opacity-60"
                       >
-                        Mark Taken
+                        {markingId === r._id ? "Saving..." : "Mark Taken"}
                       </button>
                     )}
                     <span
