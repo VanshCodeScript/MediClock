@@ -309,7 +309,7 @@ const ChronobiologyMedicationScheduler = () => {
                     AI Circadian Insights
                   </h3>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Generate fresh LLM insights from your current wake/sleep and meal timings.
+                     
                   </p>
                 </div>
                 <motion.button

@@ -26,6 +26,7 @@ import circadianInsightsRouter from './routes/circadian-insights.js';
 import sosRouter from './routes/sos.js';
 import videoRouter from './routes/video.js';
 import { registerCallSignaling } from './socket/callSignaling.js';
+import { startReminderAutomation } from './services/reminderAutomation.js';
 
 console.log("🔑 Gemini API Key loaded:", process.env.GEMINI_API_KEY ? "YES" : "NO");
 
@@ -119,4 +120,5 @@ app.use((err, req, res, next) => {
 httpServer.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
+  startReminderAutomation();
 });

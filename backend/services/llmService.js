@@ -233,6 +233,83 @@ Format as JSON array with objects: {insight: "...", time: "HH:MM", impact: "high
 };
 
 /**
+ * Enrich deterministic circadian health insights with natural language via Groq.
+ * Returns an array of { metric, message, recommendation, explanation }.
+ */
+export const generateCircadianHealthNarrative = async (metrics, insights) => {
+  const groq = getGroqClient();
+  if (!groq) return null;
+
+  const prompt = `You are a clinical chronobiology assistant.
+
+Input metrics:
+- Sleep duration: ${metrics.sleepDurationHours} hours
+- Breakfast gap: ${Math.round(metrics.breakfastGapMin)} min
+- Lunch gap: ${Math.round(metrics.lunchGapMin)} min
+- Dinner gap: ${Math.round(metrics.dinnerGapMin)} min
+- Dinner-to-sleep gap: ${Math.round(metrics.sleepFoodGapMin)} min
+- Wake time: ${metrics.wakeTime}
+- Sleep time: ${metrics.sleepTime}
+- Breakfast time: ${metrics.breakfastTime}
+- Lunch time: ${metrics.lunchTime}
+- Dinner time: ${metrics.dinnerTime}
+
+Deterministic findings:
+${JSON.stringify(insights, null, 2)}
+
+Task:
+Generate concise user-friendly text for each finding.
+
+STRICT OUTPUT FORMAT:
+Return JSON array only.
+Each object must have:
+- metric
+- message
+- recommendation
+- explanation
+
+Rules:
+- Keep medical tone simple and practical.
+- Do not invent new metrics.
+- Keep message <= 20 words and recommendation <= 24 words.`;
+
+  try {
+    const completion = await createChatCompletion(groq, {
+      max_tokens: 1200,
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    const text = completion?.choices?.[0]?.message?.content || "";
+
+    let parsed = null;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      const match = text.match(/\[[\s\S]*\]/);
+      if (match) {
+        parsed = JSON.parse(match[0]);
+      }
+    }
+
+    if (!Array.isArray(parsed)) {
+      return null;
+    }
+
+    return parsed
+      .filter((x) => x && x.metric)
+      .map((x) => ({
+        metric: String(x.metric),
+        message: String(x.message || ""),
+        recommendation: String(x.recommendation || ""),
+        explanation: String(x.explanation || ""),
+      }));
+  } catch (error) {
+    console.error("Error generating Groq health narrative:", error.message);
+    return null;
+  }
+};
+
+/**
  * Find optimal medication timing using LLM analysis
  * Considers drug constraints, patient schedule, and chronobiology
  */

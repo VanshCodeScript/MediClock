@@ -139,6 +139,17 @@ export const api = {
       const response = await fetch(`${API_BASE_URL}/reminders/user/${userId}`);
       return response.json();
     },
+    getTimeline: async (userId) => {
+      const response = await fetch(`${API_BASE_URL}/reminders/user/${userId}/timeline`);
+      return response.json();
+    },
+    sendDueWhatsApp: async (userId) => {
+      const response = await fetch(`${API_BASE_URL}/reminders/user/${userId}/send-due-whatsapp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      return response.json();
+    },
     getById: async (reminderId) => {
       const response = await fetch(`${API_BASE_URL}/reminders/${reminderId}`);
       return response.json();
@@ -473,6 +484,40 @@ export const api = {
     getOptimalTimes: async (userId, date) => {
       const response = await fetch(
         `${API_BASE_URL}/circadian-rhythm/user/${userId}/optimal-times/${date}`
+      );
+      return response.json();
+    },
+  },
+
+  // Circadian Profile
+  circadianProfile: {
+    getByUserId: async (userId) => {
+      const response = await fetch(`${API_BASE_URL}/circadian-profile/user/${userId}`);
+      return response.json();
+    },
+    upsert: async (profileData) => {
+      const response = await fetch(`${API_BASE_URL}/circadian-profile`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(profileData),
+      });
+      return response.json();
+    },
+  },
+
+  // Circadian Insights
+  circadianInsights: {
+    generateHealthSuggestions: async (payload) => {
+      const response = await fetch(`${API_BASE_URL}/circadian-insights/health-suggestions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      return response.json();
+    },
+    getHealthSuggestionsByUserId: async (userId, useLLM = true) => {
+      const response = await fetch(
+        `${API_BASE_URL}/circadian-insights/health-suggestions/user/${userId}?useLLM=${useLLM}`
       );
       return response.json();
     },
