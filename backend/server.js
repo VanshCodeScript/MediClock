@@ -5,6 +5,17 @@ import { connectDB } from './db.js';
 import usersRouter from './routes/users.js';
 import medicationsRouter from './routes/medications.js';
 import remindersRouter from './routes/reminders.js';
+import mealsRouter from './routes/meals.js';
+import healthMetricsRouter from './routes/health-metrics.js';
+import sleepRouter from './routes/sleep.js';
+import emergencyContactsRouter from './routes/emergency-contacts.js';
+import drugInteractionsRouter from './routes/drug-interactions.js';
+import healthInsightsRouter from './routes/health-insights.js';
+import videoSessionsRouter from './routes/video-sessions.js';
+import qrCardsRouter from './routes/qr-cards.js';
+import circadianRhythmRouter from './routes/circadian-rhythm.js';
+import medicationAdherenceRouter from './routes/medication-adherence.js';
+import notificationsRouter from './routes/notifications.js';
 
 dotenv.config();
 
@@ -27,10 +38,29 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'Server is running', timestamp: new Date() });
 });
 
-// Routes
+// Core Routes
 app.use('/api/users', usersRouter);
 app.use('/api/medications', medicationsRouter);
 app.use('/api/reminders', remindersRouter);
+
+// Health & Wellness Routes
+app.use('/api/meals', mealsRouter);
+app.use('/api/health-metrics', healthMetricsRouter);
+app.use('/api/sleep', sleepRouter);
+app.use('/api/circadian-rhythm', circadianRhythmRouter);
+
+// Emergency & Safety Routes
+app.use('/api/emergency-contacts', emergencyContactsRouter);
+app.use('/api/qr-cards', qrCardsRouter);
+
+// Medical Routes
+app.use('/api/drug-interactions', drugInteractionsRouter);
+app.use('/api/medication-adherence', medicationAdherenceRouter);
+app.use('/api/video-sessions', videoSessionsRouter);
+
+// AI & Insights Routes
+app.use('/api/health-insights', healthInsightsRouter);
+app.use('/api/notifications', notificationsRouter);
 
 // 404 handler
 app.use((req, res) => {

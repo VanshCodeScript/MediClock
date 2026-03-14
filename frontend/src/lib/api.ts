@@ -112,6 +112,382 @@ export const api = {
     },
   },
 
+  // Meals
+  meals: {
+    create: async (mealData) => {
+      const response = await fetch(`${API_BASE_URL}/meals`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(mealData),
+      });
+      return response.json();
+    },
+    getByUserAndDate: async (userId, date) => {
+      const response = await fetch(`${API_BASE_URL}/meals/user/${userId}/date/${date}`);
+      return response.json();
+    },
+    getByUserId: async (userId) => {
+      const response = await fetch(`${API_BASE_URL}/meals/user/${userId}`);
+      return response.json();
+    },
+    getSummary: async (userId, date) => {
+      const response = await fetch(`${API_BASE_URL}/meals/user/${userId}/summary/${date}`);
+      return response.json();
+    },
+    update: async (mealId, mealData) => {
+      const response = await fetch(`${API_BASE_URL}/meals/${mealId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(mealData),
+      });
+      return response.json();
+    },
+    delete: async (mealId) => {
+      const response = await fetch(`${API_BASE_URL}/meals/${mealId}`, {
+        method: 'DELETE',
+      });
+      return response.json();
+    },
+  },
+
+  // Health Metrics
+  healthMetrics: {
+    create: async (metricsData) => {
+      const response = await fetch(`${API_BASE_URL}/health-metrics`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(metricsData),
+      });
+      return response.json();
+    },
+    getByUserId: async (userId) => {
+      const response = await fetch(`${API_BASE_URL}/health-metrics/user/${userId}`);
+      return response.json();
+    },
+    getLatest: async (userId) => {
+      const response = await fetch(`${API_BASE_URL}/health-metrics/user/${userId}/latest`);
+      return response.json();
+    },
+    update: async (metricsId, metricsData) => {
+      const response = await fetch(`${API_BASE_URL}/health-metrics/${metricsId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(metricsData),
+      });
+      return response.json();
+    },
+    delete: async (metricsId) => {
+      const response = await fetch(`${API_BASE_URL}/health-metrics/${metricsId}`, {
+        method: 'DELETE',
+      });
+      return response.json();
+    },
+  },
+
+  // Sleep
+  sleep: {
+    create: async (sleepData) => {
+      const response = await fetch(`${API_BASE_URL}/sleep`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(sleepData),
+      });
+      return response.json();
+    },
+    getByUserId: async (userId) => {
+      const response = await fetch(`${API_BASE_URL}/sleep/user/${userId}`);
+      return response.json();
+    },
+    getWeek: async (userId, startDate) => {
+      const response = await fetch(`${API_BASE_URL}/sleep/user/${userId}/week/${startDate}`);
+      return response.json();
+    },
+    getAnalytics: async (userId) => {
+      const response = await fetch(`${API_BASE_URL}/sleep/user/${userId}/analytics`);
+      return response.json();
+    },
+    update: async (sleepId, sleepData) => {
+      const response = await fetch(`${API_BASE_URL}/sleep/${sleepId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(sleepData),
+      });
+      return response.json();
+    },
+    delete: async (sleepId) => {
+      const response = await fetch(`${API_BASE_URL}/sleep/${sleepId}`, {
+        method: 'DELETE',
+      });
+      return response.json();
+    },
+  },
+
+  // Emergency Contacts
+  emergencyContacts: {
+    create: async (contactData) => {
+      const response = await fetch(`${API_BASE_URL}/emergency-contacts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(contactData),
+      });
+      return response.json();
+    },
+    getByUserId: async (userId) => {
+      const response = await fetch(`${API_BASE_URL}/emergency-contacts/user/${userId}`);
+      return response.json();
+    },
+    getPrimary: async (userId) => {
+      const response = await fetch(`${API_BASE_URL}/emergency-contacts/user/${userId}/primary`);
+      return response.json();
+    },
+    update: async (contactId, contactData) => {
+      const response = await fetch(`${API_BASE_URL}/emergency-contacts/${contactId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(contactData),
+      });
+      return response.json();
+    },
+    delete: async (contactId) => {
+      const response = await fetch(`${API_BASE_URL}/emergency-contacts/${contactId}`, {
+        method: 'DELETE',
+      });
+      return response.json();
+    },
+    notifyAll: async (userId) => {
+      const response = await fetch(`${API_BASE_URL}/emergency-contacts/user/${userId}/notify-all`, {
+        method: 'POST',
+      });
+      return response.json();
+    },
+  },
+
+  // Drug Interactions
+  drugInteractions: {
+    checkPair: async (drugA, drugB) => {
+      const response = await fetch(
+        `${API_BASE_URL}/drug-interactions/check?drugA=${drugA}&drugB=${drugB}`
+      );
+      return response.json();
+    },
+    checkMultiple: async (drugs) => {
+      const response = await fetch(`${API_BASE_URL}/drug-interactions/check-multiple`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ drugs }),
+      });
+      return response.json();
+    },
+    getAll: async () => {
+      const response = await fetch(`${API_BASE_URL}/drug-interactions`);
+      return response.json();
+    },
+  },
+
+  // Health Insights
+  healthInsights: {
+    create: async (insightData) => {
+      const response = await fetch(`${API_BASE_URL}/health-insights`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(insightData),
+      });
+      return response.json();
+    },
+    getUnread: async (userId) => {
+      const response = await fetch(`${API_BASE_URL}/health-insights/user/${userId}/unread`);
+      return response.json();
+    },
+    getByUserId: async (userId) => {
+      const response = await fetch(`${API_BASE_URL}/health-insights/user/${userId}`);
+      return response.json();
+    },
+    markAsRead: async (insightId) => {
+      const response = await fetch(`${API_BASE_URL}/health-insights/${insightId}/read`, {
+        method: 'PATCH',
+      });
+      return response.json();
+    },
+    delete: async (insightId) => {
+      const response = await fetch(`${API_BASE_URL}/health-insights/${insightId}`, {
+        method: 'DELETE',
+      });
+      return response.json();
+    },
+  },
+
+  // Video Sessions
+  videoSessions: {
+    create: async (sessionData) => {
+      const response = await fetch(`${API_BASE_URL}/video-sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(sessionData),
+      });
+      return response.json();
+    },
+    getByUserId: async (userId) => {
+      const response = await fetch(`${API_BASE_URL}/video-sessions/user/${userId}`);
+      return response.json();
+    },
+    getUpcoming: async (userId) => {
+      const response = await fetch(`${API_BASE_URL}/video-sessions/user/${userId}/upcoming`);
+      return response.json();
+    },
+    update: async (sessionId, sessionData) => {
+      const response = await fetch(`${API_BASE_URL}/video-sessions/${sessionId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(sessionData),
+      });
+      return response.json();
+    },
+    start: async (sessionId) => {
+      const response = await fetch(`${API_BASE_URL}/video-sessions/${sessionId}/start`, {
+        method: 'PATCH',
+      });
+      return response.json();
+    },
+    end: async (sessionId) => {
+      const response = await fetch(`${API_BASE_URL}/video-sessions/${sessionId}/end`, {
+        method: 'PATCH',
+      });
+      return response.json();
+    },
+    cancel: async (sessionId) => {
+      const response = await fetch(`${API_BASE_URL}/video-sessions/${sessionId}/cancel`, {
+        method: 'PATCH',
+      });
+      return response.json();
+    },
+  },
+
+  // QR Cards
+  qrCards: {
+    create: async (cardData) => {
+      const response = await fetch(`${API_BASE_URL}/qr-cards`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cardData),
+      });
+      return response.json();
+    },
+    getByUserId: async (userId) => {
+      const response = await fetch(`${API_BASE_URL}/qr-cards/user/${userId}`);
+      return response.json();
+    },
+    getPublic: async (qrUrl) => {
+      const response = await fetch(`${API_BASE_URL}/qr-cards/public/${qrUrl}`);
+      return response.json();
+    },
+    update: async (cardId, cardData) => {
+      const response = await fetch(`${API_BASE_URL}/qr-cards/${cardId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cardData),
+      });
+      return response.json();
+    },
+    togglePublic: async (cardId) => {
+      const response = await fetch(`${API_BASE_URL}/qr-cards/${cardId}/toggle-public`, {
+        method: 'PATCH',
+      });
+      return response.json();
+    },
+  },
+
+  // Circadian Rhythm
+  circadianRhythm: {
+    create: async (rhythmData) => {
+      const response = await fetch(`${API_BASE_URL}/circadian-rhythm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(rhythmData),
+      });
+      return response.json();
+    },
+    getByDate: async (userId, date) => {
+      const response = await fetch(
+        `${API_BASE_URL}/circadian-rhythm/user/${userId}/date/${date}`
+      );
+      return response.json();
+    },
+    getLatest: async (userId) => {
+      const response = await fetch(`${API_BASE_URL}/circadian-rhythm/user/${userId}/latest`);
+      return response.json();
+    },
+    getOptimalTimes: async (userId, date) => {
+      const response = await fetch(
+        `${API_BASE_URL}/circadian-rhythm/user/${userId}/optimal-times/${date}`
+      );
+      return response.json();
+    },
+  },
+
+  // Medication Adherence
+  medicationAdherence: {
+    create: async (adherenceData) => {
+      const response = await fetch(`${API_BASE_URL}/medication-adherence`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(adherenceData),
+      });
+      return response.json();
+    },
+    getByUserId: async (userId) => {
+      const response = await fetch(`${API_BASE_URL}/medication-adherence/user/${userId}`);
+      return response.json();
+    },
+    getRate: async (userId) => {
+      const response = await fetch(`${API_BASE_URL}/medication-adherence/user/${userId}/rate`);
+      return response.json();
+    },
+    getByDate: async (userId, date) => {
+      const response = await fetch(
+        `${API_BASE_URL}/medication-adherence/user/${userId}/date/${date}`
+      );
+      return response.json();
+    },
+  },
+
+  // Notifications
+  notifications: {
+    create: async (notificationData) => {
+      const response = await fetch(`${API_BASE_URL}/notifications`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(notificationData),
+      });
+      return response.json();
+    },
+    getByUserId: async (userId) => {
+      const response = await fetch(`${API_BASE_URL}/notifications/user/${userId}`);
+      return response.json();
+    },
+    getUnread: async (userId) => {
+      const response = await fetch(`${API_BASE_URL}/notifications/user/${userId}/unread`);
+      return response.json();
+    },
+    markAsRead: async (notificationId) => {
+      const response = await fetch(`${API_BASE_URL}/notifications/${notificationId}/read`, {
+        method: 'PATCH',
+      });
+      return response.json();
+    },
+    markAllAsRead: async (userId) => {
+      const response = await fetch(`${API_BASE_URL}/notifications/user/${userId}/read-all`, {
+        method: 'PATCH',
+      });
+      return response.json();
+    },
+    delete: async (notificationId) => {
+      const response = await fetch(`${API_BASE_URL}/notifications/${notificationId}`, {
+        method: 'DELETE',
+      });
+      return response.json();
+    },
+  },
+
   // Health check
   health: async () => {
     const response = await fetch(`${API_BASE_URL}/health`);
