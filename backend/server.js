@@ -33,15 +33,33 @@ console.log("🔑 Gemini API Key loaded:", process.env.GEMINI_API_KEY ? "YES" : 
 const app = express();
 const httpServer = http.createServer(app);
 const PORT = process.env.PORT || 5001;
+
+// Manual allow-list: add trusted LAN IPs here (for example your doctor's device IP).
+const ALLOWED_IPS = [
+  '10.0.10.227',"10.0.8.185","10.255.255.255"
+  // '10.0.10.150', // Example: doctor device IP
+];
+
+const CLIENT_PORTS = [8080, 8081, 5173];
+const ipBasedOrigins = ALLOWED_IPS.flatMap((ip) =>
+  CLIENT_PORTS.flatMap((port) => [`http://${ip}:${port}`, `https://${ip}:${port}`])
+);
+
+const envOrigins = String(process.env.CORS_ORIGIN || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 const allowedOrigins = Array.from(
   new Set(
     [
-      process.env.CORS_ORIGIN,
+      ...envOrigins,
       'http://localhost:8080',
       'http://localhost:8081',
       'http://127.0.0.1:8080',
       'http://127.0.0.1:8081',
       'http://localhost:5173',
+      ...ipBasedOrigins,
     ].filter(Boolean)
   )
 );
