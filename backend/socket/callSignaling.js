@@ -3,6 +3,38 @@ import Call from '../models/Call.js';
 
 const userRoom = (userId) => `user:${userId}`;
 const buildRoomName = (callerId) => `consultation_${callerId}_${Date.now()}`;
+const connectedUsers = new Map();
+
+const normalizeUserId = (value) => String(value || '').trim();
+
+const addConnectedSocket = (userId, socketId) => {
+  if (!userId || !socketId) {
+    return;
+  }
+
+  const next = connectedUsers.get(userId) || new Set();
+  next.add(socketId);
+  connectedUsers.set(userId, next);
+};
+
+const removeConnectedSocket = (userId, socketId) => {
+  if (!userId || !socketId) {
+    return;
+  }
+
+  const existing = connectedUsers.get(userId);
+  if (!existing) {
+    return;
+  }
+
+  existing.delete(socketId);
+  if (existing.size === 0) {
+    connectedUsers.delete(userId);
+    return;
+  }
+
+  connectedUsers.set(userId, existing);
+};
 
 const computeDurationSeconds = (startedAt, endedAt) => {
   if (!startedAt || !endedAt) {
@@ -15,19 +47,21 @@ const computeDurationSeconds = (startedAt, endedAt) => {
 export const registerCallSignaling = (io) => {
   io.on('connection', (socket) => {
     socket.on('user:register', async ({ userId }) => {
-      if (!userId) {
+      const normalizedUserId = normalizeUserId(userId);
+      if (!normalizedUserId) {
         return;
       }
 
-      socket.data.userId = userId;
-      socket.join(userRoom(userId));
-      socket.emit('user:registered', { userId });
+      socket.data.userId = normalizedUserId;
+      addConnectedSocket(normalizedUserId, socket.id);
+      socket.join(userRoom(normalizedUserId));
+      socket.emit('user:registered', { userId: normalizedUserId });
 
       // If a call was initiated before this user socket became active,
       // replay the latest ringing call so the incoming modal is not missed.
       try {
         const pendingCall = await Call.findOne({
-          calleeId: userId,
+          calleeId: normalizedUserId,
           status: 'ringing',
         }).sort({ createdAt: -1 });
 
@@ -63,15 +97,20 @@ export const registerCallSignaling = (io) => {
           return;
         }
 
-        if (!mongoose.isValidObjectId(callerId) || !mongoose.isValidObjectId(calleeId)) {
+        const normalizedCallerId = normalizeUserId(callerId);
+        const normalizedCalleeId = normalizeUserId(calleeId);
+
+        if (!mongoose.isValidObjectId(normalizedCallerId) || !mongoose.isValidObjectId(normalizedCalleeId)) {
           ack?.({ ok: false, error: 'callerId and calleeId must be valid MongoDB ObjectIds' });
           return;
         }
 
-        const roomName = buildRoomName(callerId);
+        const roomName = buildRoomName(normalizedCallerId);
 
-        const calleeRoom = io.sockets.adapter.rooms.get(userRoom(calleeId));
-        const calleeOnline = !!calleeRoom && calleeRoom.size > 0;
+        const calleeRoom = io.sockets.adapter.rooms.get(userRoom(normalizedCalleeId));
+        const calleeOnlineByRoom = !!calleeRoom && calleeRoom.size > 0;
+        const calleeOnlineByMap = (connectedUsers.get(normalizedCalleeId)?.size || 0) > 0;
+        const calleeOnline = calleeOnlineByRoom || calleeOnlineByMap;
 
         if (!calleeOnline) {
           ack?.({
@@ -82,10 +121,10 @@ export const registerCallSignaling = (io) => {
         }
 
         const call = await Call.create({
-          callerId,
+          callerId: normalizedCallerId,
           callerName,
           callerRole,
-          calleeId,
+          calleeId: normalizedCalleeId,
           calleeRole,
           roomName,
           status: 'ringing',
@@ -93,17 +132,17 @@ export const registerCallSignaling = (io) => {
 
         const eventPayload = {
           callId: String(call._id),
-          callerId,
+          callerId: normalizedCallerId,
           callerName,
           callerRole,
-          calleeId,
+          calleeId: normalizedCalleeId,
           calleeRole,
           roomName,
           status: call.status,
         };
 
-        io.to(userRoom(calleeId)).emit('call:incoming', eventPayload);
-        io.to(userRoom(callerId)).emit('call:ringing', eventPayload);
+        io.to(userRoom(normalizedCalleeId)).emit('call:incoming', eventPayload);
+        io.to(userRoom(normalizedCallerId)).emit('call:ringing', eventPayload);
 
         ack?.({ ok: true, call: eventPayload });
       } catch (error) {
@@ -237,6 +276,15 @@ export const registerCallSignaling = (io) => {
       } catch (error) {
         ack?.({ ok: false, error: error.message });
       }
+    });
+
+    socket.on('disconnect', () => {
+      const userId = normalizeUserId(socket.data?.userId);
+      if (!userId) {
+        return;
+      }
+
+      removeConnectedSocket(userId, socket.id);
     });
   });
 };

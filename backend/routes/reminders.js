@@ -25,37 +25,82 @@ router.post('/', async (req, res) => {
  */
 router.get('/today/:userId', async (req, res) => {
   try {
-    const reminders = await Reminder.find({
-      userId: req.params.userId,
+    const { userId } = req.params;
+
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    // Daily rollover: completed reminders from previous days should be pending again today.
+    await Reminder.updateMany(
+      {
+        userId,
+        status: 'active',
+        isCompleted: true,
+        $or: [{ lastTakenAt: { $lt: startOfDay } }, { lastTakenAt: { $exists: false } }],
+      },
+      { $set: { isCompleted: false } }
+    );
+
+    const { timeline } = await buildMedicationTimelineForUser(userId, new Date());
+
+    const existingReminders = await Reminder.find({
+      userId,
       status: 'active',
     })
-      .populate('medicationId', 'name dosage')
+      .select('_id medicationId time')
       .lean();
 
-    const nowMinutes = (() => {
-      const d = new Date();
-      return d.getHours() * 60 + d.getMinutes();
-    })();
+    const reminderByMedAndTime = new Map(
+      existingReminders.map((r) => [
+        `${String(r.medicationId)}|${String(r.time || '')}`,
+        r,
+      ])
+    );
 
-    const mapped = reminders.map((r) => {
-      const [hh, mm] = (r.time || '00:00').split(':').map(Number);
-      const reminderMinutes = hh * 60 + mm;
+    const rows = [];
+    for (const item of timeline) {
+      const medicationId = item.medicationId ? String(item.medicationId) : '';
+      const medicationTime = String(item.medicationTime || '00:00');
+      const key = `${medicationId}|${medicationTime}`;
 
-      let status = 'pending';
-      if (r.isCompleted) {
-        status = 'taken';
-      } else if (reminderMinutes < nowMinutes) {
-        status = 'missed';
+      let reminder = reminderByMedAndTime.get(key);
+      if (!reminder && medicationId) {
+        // Ensure schedule-derived medications are visible/trackable in reminder UI.
+        reminder = await Reminder.findOneAndUpdate(
+          { userId, medicationId, time: medicationTime, status: 'active' },
+          {
+            $setOnInsert: {
+              userId,
+              medicationId,
+              time: medicationTime,
+              status: 'active',
+            },
+          },
+          { new: true, upsert: true }
+        )
+          .select('_id medicationId time')
+          .lean();
+
+        if (reminder) {
+          reminderByMedAndTime.set(key, reminder);
+        }
       }
 
-      return {
-        _id: r._id,
-        medicineName: r.medicationId?.name ?? 'Unknown',
-        dosage: r.medicationId?.dosage ?? '',
-        time: r.time,
-        status,
-      };
-    });
+      rows.push({
+        _id: reminder?._id || `${medicationId}-${medicationTime}`,
+        medicineName: item.medicationName || 'Unknown',
+        dosage: item.dosage || '',
+        time: medicationTime,
+        status:
+          item.status === 'taken'
+            ? 'taken'
+            : item.status === 'missed'
+              ? 'missed'
+              : 'pending',
+      });
+    }
+
+    const mapped = rows;
 
     // Sort earliest first
     mapped.sort((a, b) => a.time.localeCompare(b.time));

@@ -10,9 +10,13 @@ export const startReminderAutomation = () => {
   const run = async () => {
     try {
       const result = await sendDueWhatsAppRemindersForAllUsers();
-      if (result.sentCount > 0 || result.skippedCount > 0) {
+      if (
+        result.sentCount > 0 ||
+        result.skippedCount > 0 ||
+        result.missedAlertCount > 0
+      ) {
         console.log(
-          `[ReminderAutomation] users=${result.usersProcessed}, sent=${result.sentCount}, skipped=${result.skippedCount}`
+          `[ReminderAutomation] users=${result.usersProcessed}, sent=${result.sentCount}, skipped=${result.skippedCount}, missedAlertsSent=${result.missedAlertCount}, missedAlertsSkipped=${result.missedAlertSkippedCount}`
         );
       }
     } catch (error) {

@@ -7,7 +7,25 @@ import TwilioVideo from "twilio-video";
 import { api } from "@/lib/api";
 import { useLocation } from "react-router-dom";
 
-const API_BASE = "http://localhost:5001";
+const resolveSocketBase = () => {
+  const envSocketBase = import.meta.env.VITE_SOCKET_BASE_URL;
+  if (envSocketBase) {
+    return String(envSocketBase).replace(/\/$/, "");
+  }
+
+  const envApiBase = import.meta.env.VITE_API_BASE_URL;
+  if (envApiBase) {
+    return String(envApiBase).replace(/\/api\/?$/, "").replace(/\/$/, "");
+  }
+
+  if (typeof window !== "undefined") {
+    return `${window.location.protocol}//${window.location.hostname}:5001`;
+  }
+
+  return "http://localhost:5001";
+};
+
+const API_BASE = resolveSocketBase();
 
 type StoredUser = {
   _id: string;

@@ -1,4 +1,5 @@
 import Medication from '../models/Medication.js';
+import Reminder from '../models/Reminder.js';
 import User from '../models/User.js';
 import CircadianProfile from '../models/CircadianProfile.js';
 import NotificationLog from '../models/NotificationLog.js';
@@ -23,6 +24,7 @@ const format12Hour = (time24) => {
 
 const normalizePhoneToChatId = (phone) => {
   const configured = process.env.GREEN_API_CHAT_ID;
+  const caregiver = process.env.CAREGIVER_WHATSAPP_NUMBER;
   const countryCode = String(process.env.GREEN_API_DEFAULT_COUNTRY_CODE || '91');
   if (configured) {
     const trimmed = String(configured).trim();
@@ -39,8 +41,16 @@ const normalizePhoneToChatId = (phone) => {
     return `${withCountry}@c.us`;
   }
 
+  if (caregiver) {
+    const caregiverDigits = String(caregiver).replace(/\D/g, '');
+    if (caregiverDigits.length >= 10) {
+      const withCountry = caregiverDigits.length === 10 ? `${countryCode}${caregiverDigits}` : caregiverDigits;
+      return `${withCountry}@c.us`;
+    }
+  }
+
   const digits = String(phone || '').replace(/\D/g, '');
-  if (!digits) return null;
+  if (digits.length < 10) return null;
 
   const withCountry = digits.length === 10 ? `${countryCode}${digits}` : digits;
   return `${withCountry}@c.us`;
@@ -63,7 +73,31 @@ export const buildMedicationTimelineForUser = async (userId, now = new Date()) =
     return { timeline: [], user: null, whatsappConfigured: false };
   }
 
-  const medications = await Medication.find({ userId, status: { $ne: 'inactive' } }).lean();
+  const startOfDay = new Date(now);
+  startOfDay.setHours(0, 0, 0, 0);
+  const endOfDay = new Date(now);
+  endOfDay.setHours(23, 59, 59, 999);
+
+  const medications = await Medication.find({
+    userId,
+    status: { $ne: 'inactive' },
+    $and: [
+      {
+        $or: [
+          { prescribedDate: { $exists: false } },
+          { prescribedDate: null },
+          { prescribedDate: { $lte: endOfDay } },
+        ],
+      },
+      {
+        $or: [
+          { endDate: { $exists: false } },
+          { endDate: null },
+          { endDate: { $gte: startOfDay } },
+        ],
+      },
+    ],
+  }).lean();
   if (!medications.length) {
     return { timeline: [], user, whatsappConfigured: Boolean(normalizePhoneToChatId(user.phone)) };
   }
@@ -71,11 +105,6 @@ export const buildMedicationTimelineForUser = async (userId, now = new Date()) =
   const profile = await getProfileForUser(userId, user);
   const scheduleResult = generateMedicationSchedule(medications, profile, []);
   const recommended = scheduleResult?.recommendedSchedule || [];
-
-  const startOfDay = new Date(now);
-  startOfDay.setHours(0, 0, 0, 0);
-  const endOfDay = new Date(now);
-  endOfDay.setHours(23, 59, 59, 999);
 
   const sentLogs = await NotificationLog.find({
     userId,
@@ -87,7 +116,25 @@ export const buildMedicationTimelineForUser = async (userId, now = new Date()) =
     .select('title')
     .lean();
 
+  const completedReminders = await Reminder.find({
+    userId,
+    status: 'active',
+    isCompleted: true,
+    lastTakenAt: { $gte: startOfDay, $lte: endOfDay },
+  })
+    .select('medicationId time')
+    .populate('medicationId', 'name')
+    .lean();
+
   const sentTitles = new Set(sentLogs.map((log) => log.title));
+  const completedByMedicationCount = new Map();
+  for (const r of completedReminders) {
+    const medKey = String(r.medicationId?._id || r.medicationId || '');
+    completedByMedicationCount.set(medKey, (completedByMedicationCount.get(medKey) || 0) + 1);
+  }
+  const completedTitles = new Set(
+    completedReminders.map((r) => `WhatsApp reminder: ${String(r.medicationId?.name || '').trim()} at ${String(r.time || '').trim()}`)
+  );
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
 
   const timeline = recommended
@@ -101,14 +148,25 @@ export const buildMedicationTimelineForUser = async (userId, now = new Date()) =
       const reminderMin = (medicationMin - 30 + 24 * 60) % (24 * 60);
       const reminderTime = minutesToTime(reminderMin);
       const title = `WhatsApp reminder: ${dose.drugName} at ${medicationTime}`;
+      const medicationKey = String(medication?._id || '');
+      const remainingCompletedForMedication = completedByMedicationCount.get(medicationKey) || 0;
+      const canConsumeCompletedDose = remainingCompletedForMedication > 0;
 
       let status = 'pending';
-      if (sentTitles.has(title)) {
+      if (canConsumeCompletedDose || completedTitles.has(title)) {
+        status = 'taken';
+        if (canConsumeCompletedDose) {
+          completedByMedicationCount.set(medicationKey, remainingCompletedForMedication - 1);
+        }
+      } else if (sentTitles.has(title)) {
         status = 'sent';
-      } else if (nowMinutes >= medicationMin) {
-        status = 'missed';
       } else if (nowMinutes >= reminderMin) {
         status = 'due';
+      }
+
+      // After medication time passes without completion, keep it as pending (overdue pending).
+      if (status !== 'taken' && nowMinutes >= medicationMin) {
+        status = 'pending';
       }
 
       return {
@@ -243,16 +301,127 @@ export const sendDueWhatsAppRemindersForUser = async (userId, now = new Date(), 
   };
 };
 
+export const sendMissedReminderAlertForUser = async (userId, now = new Date(), options = {}) => {
+  const { threshold = 3 } = options;
+  const { timeline, user, whatsappConfigured } = await buildMedicationTimelineForUser(userId, now);
+
+  if (!user) {
+    return { alerted: false, reason: 'User not found', missedCount: 0 };
+  }
+
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const pendingItems = timeline.filter((item) => {
+    if (item.status !== 'pending') return false;
+    const [hh, mm] = String(item.medicationTime || '00:00').split(':').map(Number);
+    const medicationMin = (Number.isFinite(hh) ? hh : 0) * 60 + (Number.isFinite(mm) ? mm : 0);
+    return nowMinutes >= medicationMin;
+  });
+  const pendingCount = pendingItems.length;
+
+  if (pendingCount < threshold) {
+    return {
+      alerted: false,
+      reason: `Pending threshold not reached (${pendingCount}/${threshold})`,
+      pendingCount,
+    };
+  }
+
+  const chatId = normalizePhoneToChatId(user.phone);
+  if (!chatId || !whatsappConfigured) {
+    return {
+      alerted: false,
+      reason: 'WhatsApp target not configured. Set user.phone or GREEN_API_CHAT_ID.',
+      pendingCount,
+    };
+  }
+
+  const startOfDay = new Date(now);
+  startOfDay.setHours(0, 0, 0, 0);
+  const endOfDay = new Date(now);
+  endOfDay.setHours(23, 59, 59, 999);
+
+  const existingAlert = await NotificationLog.findOne({
+    userId,
+    type: 'alert',
+    channel: 'whatsapp',
+    sentAt: { $gte: startOfDay, $lte: endOfDay },
+    title: { $regex: '^Missed reminder alert:' },
+    status: { $in: ['sent', 'delivered'] },
+  })
+    .select('_id')
+    .lean();
+
+  if (existingAlert) {
+    return {
+      alerted: false,
+      reason: 'Pending reminder alert already sent today',
+      pendingCount,
+    };
+  }
+
+  const preview = pendingItems
+    .slice(0, 5)
+    .map((item, index) => `${index + 1}. ${item.medicationName} (${item.displayMedicationTime})`)
+    .join('\n');
+
+  const message = [
+    'MediClock Alert',
+    `You have ${pendingCount} pending medication reminder${pendingCount === 1 ? '' : 's'} past due today.`,
+    '',
+    'Pending doses:',
+    preview || 'No missed dose details available.',
+    '',
+    'Please review your reminders and take only as medically appropriate.',
+  ].join('\n');
+
+  const title = `Pending reminder alert: ${pendingCount} pending dose${pendingCount === 1 ? '' : 's'}`;
+  const sendResult = await sendWhatsAppMessage(chatId, message);
+
+  const log = new NotificationLog({
+    userId,
+    type: 'alert',
+    channel: 'whatsapp',
+    title,
+    message,
+    status: sendResult.ok ? 'sent' : 'failed',
+    isDelivered: Boolean(sendResult.ok),
+    deliveredAt: sendResult.ok ? new Date() : undefined,
+  });
+  await log.save();
+
+  return {
+    alerted: Boolean(sendResult.ok),
+    pendingCount,
+    title,
+    reason: sendResult.ok ? 'Pending reminder alert sent' : sendResult.reason,
+  };
+};
+
 export const sendDueWhatsAppRemindersForAllUsers = async () => {
   const userIds = await Medication.distinct('userId', { status: { $ne: 'inactive' } });
   let sentCount = 0;
   let skippedCount = 0;
+  let missedAlertCount = 0;
+  let missedAlertSkippedCount = 0;
 
   for (const userId of userIds) {
     const result = await sendDueWhatsAppRemindersForUser(userId, new Date());
     sentCount += result.sentCount;
     skippedCount += result.skippedCount;
+
+    const missedAlertResult = await sendMissedReminderAlertForUser(userId, new Date(), { threshold: 3 });
+    if (missedAlertResult.alerted) {
+      missedAlertCount += 1;
+    } else {
+      missedAlertSkippedCount += 1;
+    }
   }
 
-  return { sentCount, skippedCount, usersProcessed: userIds.length };
+  return {
+    sentCount,
+    skippedCount,
+    usersProcessed: userIds.length,
+    missedAlertCount,
+    missedAlertSkippedCount,
+  };
 };
