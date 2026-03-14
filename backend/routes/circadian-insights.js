@@ -5,6 +5,7 @@ import {
   generateMedicationExplanation,
   findOptimalMedicationTime,
 } from "../services/llmService.js";
+import { generateCircadianHealthInsights } from "../services/circadianHealthInsightsService.js";
 import Medication from "../models/Medication.js";
 import { generateMedicationSchedule } from "../services/medicationScheduler.js";
 
@@ -100,6 +101,111 @@ router.post("/generate-insights", async (req, res) => {
   } catch (error) {
     console.error("Error generating insights:", error);
     res.status(500).json({ message: "Error generating insights", error: error.message });
+  }
+});
+
+/**
+ * POST /api/circadian-insights/health-suggestions
+ * Deterministic circadian health insights + optional Groq enrichment.
+ * Body can include either { userId } or direct profile times.
+ */
+router.post("/health-suggestions", async (req, res) => {
+  try {
+    const { userId, useLLM = true } = req.body || {};
+
+    let profile = req.body || {};
+    if (userId) {
+      const dbProfile = await CircadianProfile.findOne({ userId }).lean();
+      if (!dbProfile) {
+        return res.status(404).json({ message: "Circadian profile not found. Please create one first." });
+      }
+      profile = dbProfile;
+    }
+
+    const required = [
+      profile.wakeTime || profile.wake_time,
+      profile.sleepTime || profile.sleep_time,
+      profile.breakfastTime || profile.breakfast_time,
+      profile.lunchTime || profile.lunch_time,
+      profile.dinnerTime || profile.dinner_time,
+    ];
+
+    if (required.some((x) => !x)) {
+      return res.status(400).json({
+        message: "Missing required profile fields: wake_time, sleep_time, breakfast_time, lunch_time, dinner_time",
+      });
+    }
+
+    const result = await generateCircadianHealthInsights(profile, { useLLM: Boolean(useLLM) });
+
+    return res.json({
+      message: "Circadian health suggestions generated",
+      userId: userId || null,
+      profile: {
+        wake_time: profile.wake_time || profile.wakeTime,
+        sleep_time: profile.sleep_time || profile.sleepTime,
+        breakfast_time: profile.breakfast_time || profile.breakfastTime,
+        lunch_time: profile.lunch_time || profile.lunchTime,
+        dinner_time: profile.dinner_time || profile.dinnerTime,
+      },
+      metrics: {
+        sleep_duration: `${result.metrics.sleepDurationHours.toFixed(2)} hours`,
+        breakfast_gap: `${Math.round(result.metrics.breakfastGapMin)} min`,
+        lunch_gap: `${Math.round(result.metrics.lunchGapMin)} min`,
+        dinner_gap: `${Math.round(result.metrics.dinnerGapMin)} min`,
+        sleep_food_gap: `${Math.round(result.metrics.sleepFoodGapMin)} min`,
+        raw: result.metrics,
+      },
+      insights: result.insights,
+      llmUsed: result.llmUsed,
+      generatedAt: new Date(),
+    });
+  } catch (error) {
+    console.error("Error generating health suggestions:", error);
+    return res.status(500).json({ message: "Error generating health suggestions", error: error.message });
+  }
+});
+
+/**
+ * GET /api/circadian-insights/health-suggestions/user/:userId
+ */
+router.get("/health-suggestions/user/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const useLLM = String(req.query.useLLM || "true").toLowerCase() !== "false";
+
+    const profile = await CircadianProfile.findOne({ userId }).lean();
+    if (!profile) {
+      return res.status(404).json({ message: "Circadian profile not found. Please create one first." });
+    }
+
+    const result = await generateCircadianHealthInsights(profile, { useLLM });
+
+    return res.json({
+      message: "Circadian health suggestions fetched",
+      userId,
+      profile: {
+        wake_time: profile.wake_time || profile.wakeTime,
+        sleep_time: profile.sleep_time || profile.sleepTime,
+        breakfast_time: profile.breakfast_time || profile.breakfastTime,
+        lunch_time: profile.lunch_time || profile.lunchTime,
+        dinner_time: profile.dinner_time || profile.dinnerTime,
+      },
+      metrics: {
+        sleep_duration: `${result.metrics.sleepDurationHours.toFixed(2)} hours`,
+        breakfast_gap: `${Math.round(result.metrics.breakfastGapMin)} min`,
+        lunch_gap: `${Math.round(result.metrics.lunchGapMin)} min`,
+        dinner_gap: `${Math.round(result.metrics.dinnerGapMin)} min`,
+        sleep_food_gap: `${Math.round(result.metrics.sleepFoodGapMin)} min`,
+        raw: result.metrics,
+      },
+      insights: result.insights,
+      llmUsed: result.llmUsed,
+      generatedAt: new Date(),
+    });
+  } catch (error) {
+    console.error("Error fetching health suggestions:", error);
+    return res.status(500).json({ message: "Error fetching health suggestions", error: error.message });
   }
 });
 
