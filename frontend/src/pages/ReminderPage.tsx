@@ -4,7 +4,7 @@ import { Bell, Clock, MessageSquare, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getOrCreateCurrentUserId } from "@/lib/userSession";
 
-const API_BASE = "http://localhost:5000/api";
+const API_BASE = "http://localhost:5001/api";
 
 interface ReminderItem {
   _id: string;

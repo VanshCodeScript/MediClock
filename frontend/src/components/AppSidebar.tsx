@@ -5,9 +5,9 @@ import {
   Lightbulb, Apple, User, Mic, AlertOctagon, QrCode, Video,
   BarChart3, Settings, ChevronLeft, ChevronRight, Activity, Brain
 } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
-const navItems = [
+const patientNavItems = [
   { label: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
   { label: "Add Medication", path: "/add-medication", icon: PlusCircle },
   { label: "Drug Interaction", path: "/drug-interaction", icon: AlertTriangle },
@@ -25,9 +25,30 @@ const navItems = [
   { label: "Settings", path: "/settings", icon: Settings },
 ];
 
+const doctorNavItems = [
+  { label: "Dashboard", path: "/doctor/dashboard", icon: LayoutDashboard },
+  { label: "Video Call", path: "/doctor/video-call", icon: Video },
+  { label: "QR Scanner", path: "/doctor/qr-scanner", icon: QrCode },
+  { label: "Profile", path: "/doctor/profile", icon: User },
+];
+
 const AppSidebar = () => {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
+  const role = useMemo(() => {
+    const raw = localStorage.getItem("mediclock_user");
+    if (!raw) {
+      return "patient";
+    }
+
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed?.role === "doctor" ? "doctor" : "patient";
+    } catch {
+      return "patient";
+    }
+  }, []);
+  const navItems = role === "doctor" ? doctorNavItems : patientNavItems;
 
   return (
     <motion.aside

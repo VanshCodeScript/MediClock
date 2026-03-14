@@ -4,7 +4,7 @@ import { Activity, User, Stethoscope } from "lucide-react";
 import PageTransition from "@/components/PageTransition";
 import { useState } from "react";
 
-const API_BASE = "http://localhost:5000/api";
+const API_BASE = "http://localhost:5001/api";
 
 const LoginPage = () => {
   const [role, setRole] = useState<"patient" | "doctor">("patient");
@@ -37,7 +37,7 @@ const LoginPage = () => {
       localStorage.setItem("mediclock_user", JSON.stringify(data.user));
       localStorage.setItem("mediclock_user_id", data.user._id);
 
-      navigate(data.user.role === "doctor" ? "/doctor-dashboard" : "/dashboard");
+      navigate(data.user.role === "doctor" ? "/doctor/dashboard" : "/dashboard");
     } catch {
       setError("Unable to connect to server. Please try again.");
     } finally {

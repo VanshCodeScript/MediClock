@@ -1,6 +1,8 @@
 import 'dotenv/config';
+import http from 'http';
 import express from 'express';
 import cors from 'cors';
+import { Server as SocketIOServer } from 'socket.io';
 import { connectDB } from './db.js';
 import usersRouter from './routes/users.js';
 import medicationsRouter from './routes/medications.js';
@@ -22,17 +24,38 @@ import circadianProfileRouter from './routes/circadian-profile.js';
 import medicationSchedulerRouter from './routes/medication-scheduler.js';
 import circadianInsightsRouter from './routes/circadian-insights.js';
 import sosRouter from './routes/sos.js';
+import videoRouter from './routes/video.js';
+import { registerCallSignaling } from './socket/callSignaling.js';
 
 console.log("🔑 Gemini API Key loaded:", process.env.GEMINI_API_KEY ? "YES" : "NO");
 
 const app = express();
+const httpServer = http.createServer(app);
 const PORT = process.env.PORT || 5001;
+const allowedOrigins = Array.from(
+  new Set(
+    [
+      process.env.CORS_ORIGIN,
+      'http://localhost:8080',
+      'http://localhost:8081',
+      'http://127.0.0.1:8080',
+      'http://127.0.0.1:8081',
+      'http://localhost:5173',
+    ].filter(Boolean)
+  )
+);
+const io = new SocketIOServer(httpServer, {
+  cors: {
+    origin: allowedOrigins,
+    credentials: true,
+  },
+});
 
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cors({
-  origin: 'http://localhost:8080',
+  origin: allowedOrigins,
   credentials: true,
 }));
 
@@ -44,8 +67,11 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'Server is running', timestamp: new Date() });
 });
 
+registerCallSignaling(io);
+
 // Auth Routes
 app.use('/api/auth', authRouter);
+app.use('/api/v1/video', videoRouter);
 
 // Core Routes
 app.use('/api/users', usersRouter);
@@ -90,7 +116,7 @@ app.use((err, req, res, next) => {
 });
 
 // Start server
-app.listen(PORT, () => {
+httpServer.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
 });

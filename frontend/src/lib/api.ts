@@ -1,5 +1,5 @@
 // API service for connecting frontend to backend
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = 'http://localhost:5001/api';
 
 const authHeaders = () => {
   const token = localStorage.getItem('mediclock_token');
@@ -38,6 +38,18 @@ export const api = {
       localStorage.removeItem('mediclock_token');
       localStorage.removeItem('mediclock_user');
       localStorage.removeItem('mediclock_user_id');
+    },
+  },
+
+  // Video
+  video: {
+    generateToken: async (payload: { identity: string; room?: string }) => {
+      const response = await fetch(`${API_BASE_URL}/v1/video/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      return response.json();
     },
   },
 

@@ -19,7 +19,10 @@ const pageTitles: Record<string, string> = {
   "/video-call": "Video Call Doctor",
   "/analytics": "Analytics",
   "/settings": "Settings",
-  "/doctor-dashboard": "Doctor Dashboard",
+  "/doctor/dashboard": "Doctor Dashboard",
+  "/doctor/video-call": "Video Consultation",
+  "/doctor/qr-scanner": "QR Scanner",
+  "/doctor/profile": "Doctor Profile",
 };
 
 const DashboardLayout = () => {

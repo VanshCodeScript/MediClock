@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 import { getOrCreateCurrentUserId } from "@/lib/userSession";
 
-const API_BASE = "http://localhost:5000/api";
+const API_BASE = "http://localhost:5001/api";
 
 // Circadian timeline data for 24-hour view
 const generateCircadianTimeline = () => {

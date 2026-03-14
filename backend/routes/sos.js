@@ -52,6 +52,9 @@ router.post('/trigger', async (req, res) => {
       callMade: callResult.success,
       callMessage: callResult.message,
       callSid: callResult.callSid,
+      callStatus: callResult.callStatus || null,
+      callErrorCode: callResult.callErrorCode || null,
+      callErrorMessage: callResult.callErrorMessage || null,
       contactsNotified,
       alertId: log._id,
       message: callResult.success
@@ -132,6 +135,27 @@ router.get('/status', (req, res) => {
       ? 'Twilio is configured and ready'
       : 'Twilio is not configured. Add credentials to .env',
   });
+});
+
+// GET /api/sos/calls/:sid - Inspect Twilio call diagnostic details
+router.get('/calls/:sid', async (req, res) => {
+  try {
+    if (!twilioSOS.isConfigured()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Twilio is not configured. Add credentials to .env',
+      });
+    }
+
+    const details = await twilioSOS.getCallDetails(req.params.sid);
+    if (!details) {
+      return res.status(404).json({ success: false, message: 'Call not found' });
+    }
+
+    return res.json({ success: true, call: details });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
 });
 
 export default router;

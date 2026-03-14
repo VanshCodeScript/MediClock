@@ -30,6 +30,34 @@ class TwilioSOSService {
     return this._ready;
   }
 
+  async getCallDetails(callSid) {
+    if (!this._ready || !callSid) {
+      return null;
+    }
+
+    try {
+      const call = await this.twilioClient.calls(callSid).fetch();
+      return {
+        sid: call.sid,
+        status: call.status,
+        to: call.to,
+        from: call.from,
+        direction: call.direction,
+        duration: call.duration,
+        errorCode: call.errorCode,
+        errorMessage: call.errorMessage,
+        startTime: call.startTime,
+        endTime: call.endTime,
+      };
+    } catch (error) {
+      return {
+        sid: callSid,
+        status: 'unknown',
+        errorMessage: `Failed to fetch call details: ${error.message}`,
+      };
+    }
+  }
+
   async triggerEmergencyCall(elderlyName = 'the patient', reason = '') {
     if (!this._ready) {
       console.warn('[TwilioSOS] Call not made – Twilio not configured.');
@@ -51,8 +79,25 @@ class TwilioSOSService {
         twiml,
       });
 
+      // Give Twilio a brief moment to update call lifecycle before fetching status.
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      const details = await this.getCallDetails(call.sid);
+
       console.log(`[TwilioSOS] Emergency call initiated for ${elderlyName}. SID: ${call.sid}`);
-      return { success: true, callSid: call.sid, message: `Emergency call triggered for ${elderlyName}` };
+      if (details?.errorCode || details?.status === 'failed') {
+        console.warn(
+          `[TwilioSOS] Call diagnostic for ${call.sid}: status=${details.status}, error=${details.errorCode || 'none'} ${details.errorMessage || ''}`
+        );
+      }
+
+      return {
+        success: true,
+        callSid: call.sid,
+        callStatus: details?.status || call.status || 'queued',
+        callErrorCode: details?.errorCode || null,
+        callErrorMessage: details?.errorMessage || null,
+        message: `Emergency call triggered for ${elderlyName}`,
+      };
     } catch (error) {
       console.error('[TwilioSOS] Call failed:', error.message);
       return { success: false, message: error.message };
