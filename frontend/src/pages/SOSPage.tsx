@@ -3,7 +3,20 @@ import PageTransition from "@/components/PageTransition";
 import { AlertOctagon, Phone, MapPin, Heart, User, Shield, Loader2, CheckCircle, XCircle, History } from "lucide-react";
 import { useState, useEffect } from "react";
 
-const API_URL = "http://localhost:5001/api";
+const getApiBaseUrl = () => {
+  const envBase = import.meta.env.VITE_API_BASE_URL;
+  if (envBase) {
+    return String(envBase).replace(/\/$/, "");
+  }
+
+  if (typeof window !== "undefined") {
+    return `${window.location.protocol}//${window.location.hostname}:5001/api/v1`;
+  }
+
+  return "http://localhost:5001/api/v1";
+};
+
+const API_URL = getApiBaseUrl();
 
 interface SOSAlert {
   id: string;

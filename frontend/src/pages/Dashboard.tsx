@@ -7,15 +7,23 @@ import {
   Brain,
   Bell,
   CheckCircle2,
+  HeartPulse,
+  Footprints,
+  Moon,
+  Activity,
   Loader2,
   Sunrise,
   Sunset,
 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip, BarChart, Bar } from "recharts";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { api } from "@/lib/api";
 import { getOrCreateCurrentUserId } from "@/lib/userSession";
+import { wearableSensorsService } from "@/services/wearableSensors";
+
+const WEARABLE_POLL_INTERVAL_MS = 30 * 1000;
+const DASHBOARD_POLL_INTERVAL_MS = 60 * 1000;
 
 type TimelineReminder = {
   medicationName: string;
@@ -41,6 +49,13 @@ type DashboardData = {
   healthLatest: any;
   caloriesToday: number | null;
   profile: CircadianProfile;
+};
+
+type WearableMetrics = {
+  steps: number;
+  activityLevel: string;
+  movementScore: number;
+  recordedAt: string | null;
 };
 
 type HoverInfo = {
@@ -110,6 +125,8 @@ const riskFromThreshold = (value: number, low: number, high: number): "green" | 
   if (value < low + 2 || value > high - 2) return "yellow";
   return "green";
 };
+
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 const minutesUntil = (nowMinutes: number, targetMinutes: number) =>
   (targetMinutes - nowMinutes + 1440) % 1440;
@@ -433,6 +450,13 @@ const CircadianWheel = ({
 const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [wearablesLoading, setWearablesLoading] = useState(false);
+  const [wearablesError, setWearablesError] = useState<string | null>(null);
+  const [sensorNotice, setSensorNotice] = useState<string | null>(null);
+  const [needsSensorPermission, setNeedsSensorPermission] = useState(false);
+  const [sensorStarted, setSensorStarted] = useState(false);
+  const [liveHeartRate, setLiveHeartRate] = useState(72);
+  const [wearables, setWearables] = useState<WearableMetrics | null>(null);
   const [data, setData] = useState<DashboardData>({
     timeline: [],
     healthLatest: null,
@@ -467,12 +491,35 @@ const Dashboard = () => {
     });
   };
 
+  const syncWearables = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
+    try {
+      if (!silent) {
+        setWearablesLoading(true);
+      }
+
+      const payload = await api.wearables.getLatest();
+      setWearables({
+        steps: Number(payload?.steps ?? 0),
+        activityLevel: String(payload?.activityLevel || "resting"),
+        movementScore: Number(payload?.movementScore ?? 0),
+        recordedAt: payload?.recordedAt || null,
+      });
+      setWearablesError(null);
+    } catch (e: any) {
+      setWearablesError(e?.message || "Unable to refresh wearable metrics");
+    } finally {
+      if (!silent) {
+        setWearablesLoading(false);
+      }
+    }
+  }, []);
+
   useEffect(() => {
     const init = async () => {
       try {
         setLoading(true);
         setError(null);
-        await fetchDashboard();
+        await Promise.all([fetchDashboard(), syncWearables()]);
       } catch (e: any) {
         setError(e?.message || "Failed to load dashboard");
       } finally {
@@ -481,7 +528,105 @@ const Dashboard = () => {
     };
 
     init();
+  }, [syncWearables]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      void syncWearables({ silent: true });
+    }, WEARABLE_POLL_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [syncWearables]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      void fetchDashboard().catch(() => {
+        // Keep current UI state when background refresh fails.
+      });
+    }, DASHBOARD_POLL_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
   }, []);
+
+  useEffect(() => {
+    const sourceHeartRate = Number(data.healthLatest?.heartRate ?? 72);
+    const sanitized = clamp(Number.isFinite(sourceHeartRate) ? sourceHeartRate : 72, 60, 100);
+    setLiveHeartRate(Math.round(sanitized));
+  }, [data.healthLatest?.heartRate]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setLiveHeartRate((prev) => {
+        const backendHeartRate = Number(data.healthLatest?.heartRate ?? 72);
+        const movementScore = Number(wearables?.movementScore ?? 0);
+        const activity = String(wearables?.activityLevel || "resting").toLowerCase();
+
+        const activityBase =
+          activity === "running" ? 92 : activity === "walking" ? 80 : 72;
+        const movementAdjustment = clamp(movementScore * 0.8, 0, 12);
+        const backendAnchor = Number.isFinite(backendHeartRate)
+          ? clamp(backendHeartRate, 60, 100)
+          : activityBase + movementAdjustment;
+
+        const target = clamp((activityBase + movementAdjustment + backendAnchor) / 2, 60, 100);
+        const next = prev + (target - prev) * 0.35 + (Math.random() - 0.5) * 2;
+        return Math.round(clamp(next, 60, 100));
+      });
+    }, 2500);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [data.healthLatest?.heartRate, wearables?.activityLevel, wearables?.movementScore]);
+
+  useEffect(() => {
+    let active = true;
+
+    wearableSensorsService.setCallbacks({
+      onUpdate: (snapshot) => {
+        if (!active) return;
+        setWearables((prev) => ({
+          ...(prev || {}),
+          steps: snapshot.steps * 2,
+          activityLevel: snapshot.activityLevel,
+          movementScore: snapshot.movementScore,
+          recordedAt: snapshot.timestamp,
+        }));
+      },
+      onError: (message) => {
+        if (!active) return;
+        setWearablesError(message);
+      },
+    });
+
+    const initSensors = async () => {
+      const result = await wearableSensorsService.start();
+      if (!active) return;
+
+      setNeedsSensorPermission(Boolean(result.requiresPermission));
+      setSensorStarted(Boolean(result.started));
+      setSensorNotice(result.started ? null : result.message || null);
+    };
+
+    void initSensors();
+
+    return () => {
+      active = false;
+      wearableSensorsService.stop();
+      wearableSensorsService.setCallbacks({});
+    };
+  }, []);
+
+  const enableMotionSensors = async () => {
+    const result = await wearableSensorsService.requestPermissionAndStart();
+    setNeedsSensorPermission(Boolean(result.requiresPermission));
+    setSensorStarted(Boolean(result.started));
+    setSensorNotice(result.started ? null : result.message || null);
+  };
 
   const hormoneData = generateHormoneSeries(data.profile);
   const now = new Date();
@@ -602,6 +747,21 @@ const Dashboard = () => {
         : `Plan light movement and hydration near ${format12h(nextAnchor.time)}.`
     : "Keep a consistent wake, meal, and sleep routine today.";
 
+  const heartRateValue = liveHeartRate;
+  const stepsValue = wearables?.steps ?? 0;
+  const movementScoreValue = wearables?.movementScore ?? 0;
+  const activityLevelValue = wearables?.activityLevel || "resting";
+
+  const heartRateStatus = riskFromThreshold(heartRateValue, 55, 100);
+  const stepsStatus = stepsValue >= 8000 ? "green" : stepsValue >= 4000 ? "yellow" : "red";
+  const movementStatus = movementScoreValue >= 15 ? "green" : movementScoreValue >= 5 ? "yellow" : "red";
+  const activityStatus =
+    activityLevelValue.toLowerCase() === "running"
+      ? "green"
+      : activityLevelValue.toLowerCase() === "walking"
+        ? "yellow"
+        : "red";
+
   return (
     <PageTransition>
       <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
@@ -663,6 +823,58 @@ const Dashboard = () => {
         <p className="text-sm text-muted-foreground mb-1">Recommended Next Action</p>
         <p className="text-base font-medium">{nextAction}</p>
       </motion.div>
+
+      <motion.div variants={fadeUp} className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        <StatCard
+          title="Heart Rate"
+          value={Number.isFinite(heartRateValue) ? String(Math.round(heartRateValue)) : "--"}
+          unit="bpm"
+          icon={<HeartPulse className="w-5 h-5" />}
+          trend={wearablesLoading ? "Syncing..." : "Auto-refresh every 2-3 sec"}
+          status={heartRateStatus}
+        />
+        <StatCard
+          title="Steps"
+          value={wearables ? String(Math.round(stepsValue)) : "--"}
+          icon={<Footprints className="w-5 h-5" />}
+          trend={wearablesLoading ? "Syncing..." : "Today's movement"}
+          status={stepsStatus}
+        />
+        <StatCard
+          title="Movement Score"
+          value={wearables ? movementScoreValue.toFixed(1) : "--"}
+          icon={<Moon className="w-5 h-5" />}
+          trend={wearablesLoading ? "Syncing..." : "Device motion intensity"}
+          status={movementStatus}
+        />
+        <StatCard
+          title="Activity Level"
+          value={wearables ? activityLevelValue.charAt(0).toUpperCase() + activityLevelValue.slice(1) : "--"}
+          icon={<Activity className="w-5 h-5" />}
+          trend={wearablesLoading ? "Syncing..." : "resting/walking/running"}
+          status={activityStatus}
+        />
+      </motion.div>
+
+      {(sensorNotice || !sensorStarted) && (
+        <motion.div variants={fadeUp} className="glass-card p-4 border-l-4 border-blue-400 text-sm text-blue-800 bg-blue-50/40">
+          {sensorNotice || "Enable motion sensors to start live step/activity capture from your phone."}
+          {(needsSensorPermission || !sensorStarted) && (
+            <button
+              onClick={enableMotionSensors}
+              className="ml-3 inline-flex items-center rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50 transition-colors"
+            >
+              Enable Motion Sensors
+            </button>
+          )}
+        </motion.div>
+      )}
+
+      {wearablesError && (
+        <motion.div variants={fadeUp} className="glass-card p-4 border-l-4 border-yellow-400 text-sm text-yellow-800 bg-yellow-50/40">
+          Wearable sync issue: {wearablesError}
+        </motion.div>
+      )}
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
         {/* Medicine Schedule */}

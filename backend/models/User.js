@@ -37,6 +37,15 @@ const userSchema = new mongoose.Schema(
       enum: ['user', 'doctor'],
       default: 'user',
     },
+    googleAccessToken: {
+      type: String,
+    },
+    googleRefreshToken: {
+      type: String,
+    },
+    googleTokenExpiry: {
+      type: Date,
+    },
   },
   {
     timestamps: true,

@@ -7,7 +7,7 @@ import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 import { api } from "@/lib/api";
 
-interface PatientRecord {
+type PatientRecord = {
   _id?: string;
   name?: string;
   age?: number;
@@ -84,39 +84,20 @@ const DoctorQRScannerPage = () => {
 
   // Load jsQR from CDN
   useEffect(() => {
-    console.log("🔍 Checking jsQR library...");
-    if ((window as any).jsQR) {
-      console.log("✅ jsQR already loaded");
+    if (!(window as any).jsQR) {
+      const script = document.createElement("script");
+      script.src = "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js";
+      script.onload = () => {
+        setJsqrReady(true);
+      };
+      script.onerror = () => {
+        console.error("Failed to load jsQR library");
+        setError("Failed to load QR scanner library. Please refresh the page.");
+      };
+      document.head.appendChild(script);
+    } else {
       setJsqrReady(true);
-      return;
     }
-    
-    const script = document.createElement("script");
-    script.src = "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js";
-    script.async = true;
-    
-    script.onload = () => {
-      console.log("✅ jsQR library loaded successfully");
-      setJsqrReady(true);
-    };
-    
-    script.onerror = () => {
-      console.error("❌ Failed to load jsQR library from CDN");
-      // Don't block camera - we can still try to scan
-      setJsqrReady(true);
-      console.log("📌 Continuing anyway - will attempt to scan");
-    };
-    
-    console.log("📥 Loading jsQR from CDN...");
-    document.head.appendChild(script);
-    
-    // Fallback: set as ready after 3 seconds regardless
-    const timeout = setTimeout(() => {
-      console.log("⏱️ JSQr loading timeout - proceeding anyway");
-      setJsqrReady(true);
-    }, 3000);
-    
-    return () => clearTimeout(timeout);
   }, []);
 
   // Decode QR from image using jsQR with image enhancement
@@ -360,20 +341,8 @@ const DoctorQRScannerPage = () => {
         setError("Patient record not found.");
         return;
       }
-
-      // Combine all data into comprehensive record
-      const fullRecord: PatientFullRecord = {
-        ...userRes,
-        medications: Array.isArray(medsRes) ? medsRes : [],
-        healthMetrics: metricsRes || undefined,
-        sleepData: sleepRes || undefined,
-        circadianProfile: circadianRes || undefined,
-        emergencyContact: contactsRes || undefined,
-      };
-
-      setPatient(fullRecord);
-    } catch (err) {
-      console.error("Error scanning QR:", err);
+      setPatient(user);
+    } catch {
       setError("Unable to fetch patient details.");
     } finally {
       setLoading(false);
@@ -383,7 +352,6 @@ const DoctorQRScannerPage = () => {
   // Start camera
   const startCamera = async () => {
     try {
-      console.log("🎬 Starting camera...");
       setError("");
       setCameraStatus("initializing");
       setScanCount(0);
@@ -395,55 +363,45 @@ const DoctorQRScannerPage = () => {
         },
       };
       
-      console.log("📹 Requesting camera with constraints:", constraints);
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      console.log("✅ Camera stream obtained:", stream);
-      
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        console.log("📺 Video source object set");
         
         // Wait for video to be ready before starting scan
         videoRef.current.onloadedmetadata = () => {
-          console.log("✅ Video metadata loaded:", videoRef.current?.videoWidth, "x", videoRef.current?.videoHeight);
+          console.log("Video ready:", videoRef.current?.videoWidth, "x", videoRef.current?.videoHeight);
           videoRef.current?.play().catch((err) => {
-            console.error("❌ Play error:", err);
+            console.error("Play error:", err);
             setError("Failed to play video stream.");
             setCameraStatus("initializing");
           });
           setCameraActive(true);
           setScanning(true);
           setCameraStatus("ready");
-          console.log("🟢 Camera ready, starting scan");
           // Start scanning after a short delay to ensure video is truly ready
           setTimeout(() => {
-            console.log("🔍 Beginning QR scan");
             setCameraStatus("scanning");
             scanCamera();
           }, 500);
         };
         
         videoRef.current.onerror = (err) => {
-          console.error("❌ Video element error:", err);
+          console.error("Video element error:", err);
           setError("Video element error occurred.");
           setCameraStatus("initializing");
         };
       }
     } catch (err: any) {
-      console.error("❌ Camera error:", err);
+      console.error("Camera error:", err);
       setCameraStatus("initializing");
       if (err.name === "NotAllowedError") {
         setError("Camera permission denied. Please allow camera access in settings.");
-        console.error("User denied camera permission");
       } else if (err.name === "NotFoundError") {
         setError("No camera device found. Please check your device.");
-        console.error("No camera device found");
       } else if (err.name === "NotReadableError") {
         setError("Camera is in use by another application. Please close it and try again.");
-        console.error("Camera is in use by another app");
       } else {
         setError("Unable to access camera: " + err.message);
-        console.error("Generic camera error:", err.message);
       }
     }
   };
@@ -464,7 +422,7 @@ const DoctorQRScannerPage = () => {
         const stream = videoRef.current.srcObject as MediaStream;
         if (stream) {
           stream.getTracks().forEach((track) => {
-            console.log("🛑 Stopping camera track:", track.kind);
+            console.log("Stopping track:", track.kind);
             track.stop();
           });
         }
@@ -472,7 +430,6 @@ const DoctorQRScannerPage = () => {
       }
       
       setCameraActive(false);
-      console.log("📹 Camera stopped");
     } catch (err) {
       console.error("Error stopping camera:", err);
     }
@@ -651,7 +608,7 @@ const DoctorQRScannerPage = () => {
 
   return (
     <PageTransition>
-      <div className="max-w-6xl mx-auto space-y-6">
+      <div className="max-w-4xl mx-auto space-y-6">
         <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-6 space-y-4">
           <div className="flex items-center gap-2">
             <QrCode className="w-5 h-5 text-primary" />
@@ -664,24 +621,18 @@ const DoctorQRScannerPage = () => {
           {!cameraActive && !patient && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <button
-                onClick={() => {
-                  console.log("📷 Open Camera clicked");
-                  startCamera();
-                }}
-                disabled={loading}
-                className="px-4 py-3 rounded-xl gradient-blue text-primary-foreground text-sm font-medium inline-flex items-center justify-center gap-2 disabled:opacity-70 hover:shadow-lg transition-all"
+                onClick={startCamera}
+                disabled={loading || !jsqrReady}
+                className="px-4 py-3 rounded-xl gradient-blue text-primary-foreground text-sm font-medium inline-flex items-center justify-center gap-2 disabled:opacity-70"
               >
-                <QrCode className="w-4 h-4" /> Open Camera
+                <QrCode className="w-4 h-4" /> {!jsqrReady ? "Loading..." : "Open Camera"}
               </button>
               <button
-                onClick={() => {
-                  console.log("📁 Upload QR Image clicked");
-                  fileInputRef.current?.click();
-                }}
-                disabled={loading}
-                className="px-4 py-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-primary-foreground text-sm font-medium inline-flex items-center justify-center gap-2 disabled:opacity-70 hover:shadow-lg transition-all"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={loading || !jsqrReady}
+                className="px-4 py-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-primary-foreground text-sm font-medium inline-flex items-center justify-center gap-2 disabled:opacity-70"
               >
-                <Upload className="w-4 h-4" /> Upload QR Image
+                <Upload className="w-4 h-4" /> {!jsqrReady ? "Loading..." : "Upload QR Image"}
               </button>
               <input
                 ref={fileInputRef}
@@ -712,22 +663,6 @@ const DoctorQRScannerPage = () => {
                   <div className="absolute bottom-1/4 right-1/4 w-6 h-6 border-b-4 border-r-4 border-primary"></div>
                 </div>
 
-                {/* QR Detection Success Overlay */}
-                {cameraStatus === "detected" && (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.8 }}
-                    className="absolute inset-0 flex items-center justify-center bg-green-500/20 border-2 border-green-500"
-                  >
-                    <div className="text-center">
-                      <div className="text-6xl mb-2">✅</div>
-                      <p className="text-lg font-bold text-green-300">QR Code Detected!</p>
-                      <p className="text-sm text-green-200">Loading patient data...</p>
-                    </div>
-                  </motion.div>
-                )}
-
                 {/* Status and scan count - Top Right */}
                 <div className="absolute top-4 right-4 flex items-center gap-2 bg-black/70 px-3 py-2 rounded-lg backdrop-blur">
                   {cameraStatus === "initializing" && (
@@ -748,28 +683,21 @@ const DoctorQRScannerPage = () => {
                       <span className="text-xs text-primary">Scanning...</span>
                     </>
                   )}
-                  {cameraStatus === "detected" && (
-                    <>
-                      <div className="w-3 h-3 bg-green-500 rounded-full animate-bounce"></div>
-                      <span className="text-xs text-green-300 font-bold">QR Detected!</span>
-                    </>
-                  )}
                 </div>
 
                 {/* Scan counter - Bottom Left */}
                 {scanning && (
                   <div className="absolute bottom-4 left-4 flex items-center gap-2 bg-black/70 px-3 py-2 rounded-lg backdrop-blur">
-                    <span className="text-xs text-muted-foreground">Frames: </span>
+                    <span className="text-xs text-muted-foreground">Scans: </span>
                     <span className="text-xs font-bold text-primary">{scanCount}</span>
                   </div>
                 )}
 
                 {/* Help text - Bottom Center */}
                 <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 text-xs text-white/70 text-center bg-black/50 px-3 py-1 rounded-lg max-w-xs">
-                  {cameraStatus === "initializing" && "📷 Requesting camera access..."}
-                  {cameraStatus === "ready" && "📍 Position QR code in the frame"}
-                  {cameraStatus === "scanning" && "🔍 Scanning for QR code..."}
-                  {cameraStatus === "detected" && "✅ QR Code found! Processing..."}
+                  {cameraStatus === "initializing" && "Requesting camera access..."}
+                  {cameraStatus === "ready" && "Position QR code in the frame"}
+                  {cameraStatus === "scanning" && "Scanning for QR code..."}
                 </div>
               </div>
 
@@ -1051,9 +979,9 @@ const DoctorQRScannerPage = () => {
             <div className="flex items-center gap-3 pt-4 border-t flex-wrap">
               <button
                 onClick={openConsultation}
-                className="w-full md:w-auto px-6 py-3 rounded-xl gradient-blue text-primary-foreground font-medium inline-flex items-center justify-center gap-2"
+                className="px-4 py-2.5 rounded-xl gradient-blue text-primary-foreground text-sm font-medium inline-flex items-center gap-2"
               >
-                <PhoneCall className="w-4 h-4" /> Start Video Consultation
+                <PhoneCall className="w-4 h-4" /> Open Video Consultation
               </button>
               <button
                 onClick={downloadPatientPDF}

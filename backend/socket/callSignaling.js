@@ -44,7 +44,7 @@ const computeDurationSeconds = (startedAt, endedAt) => {
   return Math.max(0, Math.round((endedAt.getTime() - startedAt.getTime()) / 1000));
 };
 
-export const registerCallSignaling = (io, connectedUsers = {}) => {
+export const registerCallSignaling = (io, connectedUsers = new Map()) => {
   io.on('connection', (socket) => {
     console.log(`🔌 Socket connected: ${socket.id}`);
     
@@ -102,35 +102,24 @@ export const registerCallSignaling = (io, connectedUsers = {}) => {
           return;
         }
 
-<<<<<<< HEAD
-        if (!mongoose.isValidObjectId(callerId) || !mongoose.isValidObjectId(calleeId)) {
-          console.error("❌ Invalid MongoDB ObjectIds");
-=======
         const normalizedCallerId = normalizeUserId(callerId);
         const normalizedCalleeId = normalizeUserId(calleeId);
 
         if (!mongoose.isValidObjectId(normalizedCallerId) || !mongoose.isValidObjectId(normalizedCalleeId)) {
->>>>>>> 837e11def574c33492ce8afc014da3a442e6507f
+          console.error("❌ Invalid MongoDB ObjectIds");
           ack?.({ ok: false, error: 'callerId and calleeId must be valid MongoDB ObjectIds' });
           return;
         }
 
         const roomName = buildRoomName(normalizedCallerId);
 
-<<<<<<< HEAD
-        // Check if callee is registered in connectedUsers
-        const calleeSocketId = connectedUsers[calleeId];
-        if (!calleeSocketId) {
-          console.error(`❌ Callee ${calleeId} is not connected`);
-          console.log(`📋 Available users: ${Object.keys(connectedUsers).join(', ') || '(none)'}`);
-=======
         const calleeRoom = io.sockets.adapter.rooms.get(userRoom(normalizedCalleeId));
         const calleeOnlineByRoom = !!calleeRoom && calleeRoom.size > 0;
         const calleeOnlineByMap = (connectedUsers.get(normalizedCalleeId)?.size || 0) > 0;
         const calleeOnline = calleeOnlineByRoom || calleeOnlineByMap;
 
         if (!calleeOnline) {
->>>>>>> 837e11def574c33492ce8afc014da3a442e6507f
+          console.error(`❌ Callee ${normalizedCalleeId} is not connected`);
           ack?.({
             ok: false,
             error: 'The target user is offline or not on the video page. Ask them to open Video Call first.',
@@ -138,7 +127,7 @@ export const registerCallSignaling = (io, connectedUsers = {}) => {
           return;
         }
         
-        console.log(`✅ Callee ${calleeId} found with socket ${calleeSocketId}`);
+        console.log(`✅ Callee ${normalizedCalleeId} is online`);
 
         const call = await Call.create({
           callerId: normalizedCallerId,
@@ -161,18 +150,11 @@ export const registerCallSignaling = (io, connectedUsers = {}) => {
           status: call.status,
         };
 
-<<<<<<< HEAD
-        // Emit to both user rooms and direct socket
-        io.to(userRoom(calleeId)).emit('call:incoming', eventPayload);
-        io.to(calleeSocketId).emit('call:incoming', eventPayload);
-        io.to(userRoom(callerId)).emit('call:ringing', eventPayload);
-        
-        console.log(`📤 call:incoming sent to callee ${calleeId} (socket: ${calleeSocketId})`);
-        console.log(`📤 call:ringing sent to caller ${callerId}`);
-=======
         io.to(userRoom(normalizedCalleeId)).emit('call:incoming', eventPayload);
         io.to(userRoom(normalizedCallerId)).emit('call:ringing', eventPayload);
->>>>>>> 837e11def574c33492ce8afc014da3a442e6507f
+        
+        console.log(`📤 call:incoming sent to callee ${normalizedCalleeId}`);
+        console.log(`📤 call:ringing sent to caller ${normalizedCallerId}`);
 
         ack?.({ ok: true, call: eventPayload });
       } catch (error) {
@@ -309,22 +291,13 @@ export const registerCallSignaling = (io, connectedUsers = {}) => {
     });
 
     socket.on('disconnect', () => {
-<<<<<<< HEAD
-      // Remove user from connected users
-      const userId = socket.data.userId;
-      if (userId) {
-        delete connectedUsers[userId];
-        console.log(`🛑 User disconnected: ${userId}`);
-        console.log(`📋 Connected users now: ${Object.keys(connectedUsers).join(', ') || '(none)'}`);
-      }
-=======
       const userId = normalizeUserId(socket.data?.userId);
       if (!userId) {
         return;
       }
 
       removeConnectedSocket(userId, socket.id);
->>>>>>> 837e11def574c33492ce8afc014da3a442e6507f
+      console.log(`🛑 User disconnected: ${userId}`);
     });
   });
 };

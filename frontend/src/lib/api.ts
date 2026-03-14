@@ -6,10 +6,10 @@ const getApiBaseUrl = () => {
   }
 
   if (typeof window !== 'undefined') {
-    return `${window.location.protocol}//${window.location.hostname}:5001/api`;
+    return `${window.location.protocol}//${window.location.hostname}:5001/api/v1`;
   }
 
-  return 'http://localhost:5001/api';
+  return 'http://localhost:5001/api/v1';
 };
 
 const API_BASE_URL = getApiBaseUrl();
@@ -57,7 +57,7 @@ export const api = {
   // Video
   video: {
     generateToken: async (payload: { identity: string; room?: string }) => {
-      const response = await fetch(`${API_BASE_URL}/v1/video/token`, {
+      const response = await fetch(`${API_BASE_URL}/video/token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -71,23 +71,27 @@ export const api = {
     create: async (userData) => {
       const response = await fetch(`${API_BASE_URL}/users`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
         body: JSON.stringify(userData),
       });
       return response.json();
     },
     getAll: async () => {
-      const response = await fetch(`${API_BASE_URL}/users`);
+      const response = await fetch(`${API_BASE_URL}/users`, {
+        headers: authHeaders(),
+      });
       return response.json();
     },
     getById: async (userId) => {
-      const response = await fetch(`${API_BASE_URL}/users/${userId}`);
+      const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
+        headers: authHeaders(),
+      });
       return response.json();
     },
     update: async (userId, userData) => {
       const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
         body: JSON.stringify(userData),
       });
       return response.json();
@@ -95,6 +99,7 @@ export const api = {
     delete: async (userId) => {
       const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
         method: 'DELETE',
+        headers: authHeaders(),
       });
       return response.json();
     },
@@ -137,40 +142,48 @@ export const api = {
   // Reminders
   reminders: {
     today: async (userId: string) => {
-      const response = await fetch(`${API_BASE_URL}/reminders/today/${userId}`);
+      const response = await fetch(`${API_BASE_URL}/reminders/today/${userId}`, {
+        headers: authHeaders(),
+      });
       return response.json();
     },
     create: async (reminderData) => {
       const response = await fetch(`${API_BASE_URL}/reminders`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
         body: JSON.stringify(reminderData),
       });
       return response.json();
     },
     getByUserId: async (userId) => {
-      const response = await fetch(`${API_BASE_URL}/reminders/user/${userId}`);
+      const response = await fetch(`${API_BASE_URL}/reminders/user/${userId}`, {
+        headers: authHeaders(),
+      });
       return response.json();
     },
     getTimeline: async (userId) => {
-      const response = await fetch(`${API_BASE_URL}/reminders/user/${userId}/timeline`);
+      const response = await fetch(`${API_BASE_URL}/reminders/user/${userId}/timeline`, {
+        headers: authHeaders(),
+      });
       return response.json();
     },
     sendDueWhatsApp: async (userId) => {
       const response = await fetch(`${API_BASE_URL}/reminders/user/${userId}/send-due-whatsapp`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
       });
       return response.json();
     },
     getById: async (reminderId) => {
-      const response = await fetch(`${API_BASE_URL}/reminders/${reminderId}`);
+      const response = await fetch(`${API_BASE_URL}/reminders/${reminderId}`, {
+        headers: authHeaders(),
+      });
       return response.json();
     },
     update: async (reminderId, reminderData) => {
       const response = await fetch(`${API_BASE_URL}/reminders/${reminderId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
         body: JSON.stringify(reminderData),
       });
       return response.json();
@@ -178,13 +191,14 @@ export const api = {
     complete: async (reminderId) => {
       const response = await fetch(`${API_BASE_URL}/reminders/${reminderId}/complete`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
       });
       return response.json();
     },
     delete: async (reminderId) => {
       const response = await fetch(`${API_BASE_URL}/reminders/${reminderId}`, {
         method: 'DELETE',
+        headers: authHeaders(),
       });
       return response.json();
     },
@@ -274,6 +288,50 @@ export const api = {
         method: 'DELETE',
       });
       return response.json();
+    },
+  },
+
+  // Wearables
+  wearables: {
+    update: async (wearableData) => {
+      const response = await fetch(`${API_BASE_URL}/wearables/update`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify(wearableData),
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.error || 'Failed to update wearable data');
+      }
+
+      return payload;
+    },
+    getLatest: async () => {
+      const response = await fetch(`${API_BASE_URL}/wearables/latest`, {
+        headers: authHeaders(),
+        cache: 'no-store',
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.error || 'Failed to fetch wearable data');
+      }
+
+      return payload;
+    },
+    sync: async () => {
+      const response = await fetch(`${API_BASE_URL}/wearables/latest`, {
+        headers: authHeaders(),
+        cache: 'no-store',
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.error || 'Failed to sync wearable data');
+      }
+
+      return payload;
     },
   },
 
