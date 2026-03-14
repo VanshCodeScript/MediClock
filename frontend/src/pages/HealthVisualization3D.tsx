@@ -1,209 +1,167 @@
-import { motion } from "framer-motion";
-import PageTransition from "@/components/PageTransition";
-import { HealthAvatar } from "@/components/healthAvatar/HealthAvatar";
-import { useHealthMetrics } from "@/hooks/useHealthMetrics";
-import { getColorHex, getStressColor, getSugarColor, getHeartRiskColor, getSleepColor, getMedicationRiskColor } from "@/utils/healthColorUtils";
+import { useRef, useState } from 'react';
+import {
+  Headphones,
+  Maximize2,
+  Mic,
+  MicOff,
+  MessageSquare,
+  Minimize2,
+  Volume2,
+  VolumeX,
+} from 'lucide-react';
+import { motion } from 'framer-motion';
+import PageTransition from '@/components/PageTransition';
 
-const HealthVisualization3D = () => {
-  const metrics = useHealthMetrics();
+const VoiceAssistantPage = () => {
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isEmbedLoaded, setIsEmbedLoaded] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const HEYGEN_EMBED_URL =
+    'https://labs.heygen.com/guest/streaming-embed?share=eyJxdWFsaXR5IjoiaGlnaCIsImF2YXRhck5hbWUiOiJEZXh0ZXJfRG9jdG9yX1NpdHRpbmcyX3B1YmxpYyIsInByZXZpZXdJbWciOiJodHRwczovL2ZpbGVzMi5oZXlnZW4uYWkvYXZhdGFyL3YzL2Y4M2ZmZmM0NWZhYTQzNjhiNmRiOTU5N2U2YjMyM2NhXzQ1NTkwL3ByZXZpZXdfdGFsa18zLndlYnAiLCJuZWVkUmVtb3ZlQmFja2dyb3VuZCI6ZmFsc2UsImtub3dsZWRnZUJhc2VJZCI6ImY0ZGQ1ZWYwYmU1OTQ5YzRiNjk1M2ZiYTIyYTllZDQyIiwidXNlcm5hbWUiOiJiNWM0MTdiZWQzN2I0ZDYzYjBjOTRiNjkwMTZiZmQ2NyJ9&inIFrame=1';
 
-  const statusLegend = [
-    { status: "Normal", color: "#22c55e" },
-    { status: "Warning", color: "#fbbf24" },
-    { status: "Critical", color: "#ef4444" },
-  ];
+  const postToHeyGen = (action: string) => {
+    iframeRef.current?.contentWindow?.postMessage(
+      {
+        type: 'streaming-embed-control',
+        action,
+      },
+      '*',
+    );
+  };
+
+  const toggleFullscreen = () => {
+    setIsFullscreen((prev) => !prev);
+  };
+
+  const toggleMute = () => {
+    setIsMuted((prev) => {
+      const next = !prev;
+      postToHeyGen(next ? 'mute' : 'unmute');
+      return next;
+    });
+  };
+
+  const handleStartRecording = async () => {
+    try {
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+      postToHeyGen('start_listening');
+      setIsRecording(true);
+    } catch {
+      setIsRecording(false);
+    }
+  };
+
+  const handleStopRecording = () => {
+    postToHeyGen('stop_listening');
+    setIsRecording(false);
+  };
 
   return (
     <PageTransition>
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* 3D Visualization */}
+      <div className="max-w-6xl mx-auto px-4 py-8 space-y-8">
+        <div className="text-center">
+          <motion.h1
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="font-display text-3xl md:text-4xl font-bold text-foreground flex items-center justify-center gap-3"
+          >
+            <Headphones className="text-primary" size={32} />
+            Voice Assistant
+          </motion.h1>
+          <p className="text-muted-foreground mt-2">
+            Speak naturally. The HeyGen assistant listens and responds with voice.
+          </p>
+        </div>
+
         <motion.div
-          initial={{ opacity: 0, y: 15 }}
+          initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="glass-card overflow-hidden rounded-2xl"
-          style={{ height: "62vh" }}
+          className={`glass-card overflow-hidden flex flex-col ${isFullscreen ? 'fixed inset-3 z-50 bg-background' : 'min-h-[640px]'}`}
         >
-          <HealthAvatar className="w-full h-full" />
-        </motion.div>
-
-        {/* Health Metrics Grid */}
-        <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4"
-        >
-          {/* Stress Level Card */}
-          <div className="glass-card p-4 rounded-xl">
-            <div className="flex items-center gap-3 mb-3">
-              <div
-                className="w-4 h-4 rounded-full"
-                style={{ backgroundColor: getColorHex(getStressColor(metrics.stress)) }}
-              />
-              <p className="text-sm font-medium text-muted-foreground">Stress Level</p>
-            </div>
-            <p className="text-2xl font-bold">{Math.round(metrics.stress)}%</p>
-            <p className="text-xs text-muted-foreground mt-2">
-              {metrics.stress < 40 ? "Normal" : metrics.stress < 70 ? "Elevated" : "High"}
-            </p>
-          </div>
-
-          {/* Heart Rate Card */}
-          <div className="glass-card p-4 rounded-xl">
-            <div className="flex items-center gap-3 mb-3">
-              <div
-                className="w-4 h-4 rounded-full"
-                style={{
-                  backgroundColor: getColorHex(
-                    getHeartRiskColor((metrics.heartRate - 40) / 80 * 100)
-                  ),
-                }}
-              />
-              <p className="text-sm font-medium text-muted-foreground">Heart Rate</p>
-            </div>
-            <p className="text-2xl font-bold">{Math.round(metrics.heartRate)}</p>
-            <p className="text-xs text-muted-foreground mt-2">bpm</p>
-          </div>
-
-          {/* Blood Sugar Card */}
-          <div className="glass-card p-4 rounded-xl">
-            <div className="flex items-center gap-3 mb-3">
-              <div
-                className="w-4 h-4 rounded-full"
-                style={{ backgroundColor: getColorHex(getSugarColor(metrics.bloodSugar)) }}
-              />
-              <p className="text-sm font-medium text-muted-foreground">Blood Sugar</p>
-            </div>
-            <p className="text-2xl font-bold">{Math.round(metrics.bloodSugar)}</p>
-            <p className="text-xs text-muted-foreground mt-2">mg/dL</p>
-          </div>
-
-          {/* Sleep Quality Card */}
-          <div className="glass-card p-4 rounded-xl">
-            <div className="flex items-center gap-3 mb-3">
-              <div
-                className="w-4 h-4 rounded-full"
-                style={{ backgroundColor: getColorHex(getSleepColor(metrics.sleepScore)) }}
-              />
-              <p className="text-sm font-medium text-muted-foreground">Sleep Quality</p>
-            </div>
-            <p className="text-2xl font-bold">{Math.round(metrics.sleepScore)}%</p>
-            <p className="text-xs text-muted-foreground mt-2">
-              {metrics.sleepScore >= 80 ? "Excellent" : metrics.sleepScore >= 60 ? "Fair" : "Poor"}
-            </p>
-          </div>
-
-          {/* Medication Risk Card */}
-          <div className="glass-card p-4 rounded-xl">
-            <div className="flex items-center gap-3 mb-3">
-              <div
-                className="w-4 h-4 rounded-full"
-                style={{
-                  backgroundColor: getColorHex(getMedicationRiskColor(metrics.medicationRisk)),
-                }}
-              />
-              <p className="text-sm font-medium text-muted-foreground">Med. Risk</p>
-            </div>
-            <p className="text-2xl font-bold">{Math.round(metrics.medicationRisk)}%</p>
-            <p className="text-xs text-muted-foreground mt-2">
-              {metrics.medicationRisk < 30 ? "Low" : metrics.medicationRisk < 60 ? "Moderate" : "High"}
-            </p>
-          </div>
-        </motion.div>
-
-        {/* Information Panels */}
-        <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="grid grid-cols-1 md:grid-cols-2 gap-4"
-        >
-          {/* Legend */}
-          <div className="glass-card p-4 rounded-xl">
-            <h3 className="font-semibold mb-4">Status Legend</h3>
-            <div className="space-y-3">
-              {statusLegend.map((item) => (
-                <div key={item.status} className="flex items-center gap-3">
-                  <div
-                    className="w-3 h-3 rounded-full"
-                    style={{ backgroundColor: item.color }}
-                  />
-                  <span className="text-sm text-muted-foreground">{item.status}</span>
+          <div className="p-5 border-b border-border bg-muted/30">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center">
+                  <MessageSquare className="h-5 w-5 text-white" />
                 </div>
-              ))}
+                <div>
+                  <h2 className="font-display font-semibold text-lg text-foreground">
+                    AI Support Assistant
+                  </h2>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <p className="text-xs text-muted-foreground">
+                      Virtual assistant - voice enabled
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={handleStartRecording}
+                  disabled={isRecording || !isEmbedLoaded}
+                  className="p-2 rounded-lg hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Start Recording"
+                >
+                  <Mic className="h-4 w-4 text-muted-foreground" />
+                </button>
+                <button
+                  onClick={handleStopRecording}
+                  disabled={!isRecording || !isEmbedLoaded}
+                  className="p-2 rounded-lg hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Stop Recording"
+                >
+                  <MicOff className="h-4 w-4 text-muted-foreground" />
+                </button>
+                <button
+                  onClick={toggleMute}
+                  className="p-2 rounded-lg hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={!isEmbedLoaded}
+                  title={isMuted ? 'Unmute' : 'Mute'}
+                >
+                  {isMuted ? (
+                    <VolumeX className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <Volume2 className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </button>
+                <button
+                  onClick={toggleFullscreen}
+                  className="p-2 rounded-lg hover:bg-muted transition-colors"
+                  title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+                >
+                  {isFullscreen ? (
+                    <Minimize2 className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <Maximize2 className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-3 flex items-center gap-2">
+              <span className={`w-2 h-2 rounded-full ${isRecording ? 'bg-red-500 animate-pulse' : 'bg-muted-foreground/40'}`} />
+              <p className="text-xs text-muted-foreground">
+                {isRecording ? 'Mic recording on - assistant is listening' : 'Mic idle - press Record to start voice input'}
+              </p>
             </div>
           </div>
 
-          {/* How It Works */}
-          <div className="glass-card p-4 rounded-xl">
-            <h3 className="font-semibold mb-4">Visualization Guide</h3>
-            <div className="space-y-3 text-sm text-muted-foreground">
-              <p>• <strong>Head:</strong> Changes color based on stress level</p>
-              <p>• <strong>Chest:</strong> Pulses with heart rate, shows medication risk</p>
-              <p>• <strong>Abdomen:</strong> Reflects blood sugar levels</p>
-              <p>• <strong>Glow Effect:</strong> Indicates warning/critical zones</p>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* Metrics Details */}
-        <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="glass-card p-6 rounded-xl"
-        >
-          <h3 className="font-semibold text-lg mb-4">Detailed Analysis</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div>
-              <p className="text-sm text-muted-foreground mb-2">Stress Level Analysis</p>
-              <p className="text-xs">
-                {metrics.stress < 40
-                  ? "Your stress levels are healthy. Keep up good stress management practices."
-                  : metrics.stress < 70
-                  ? "Moderate stress detected. Consider relaxation techniques or meditation."
-                  : "High stress levels detected. Consult healthcare provider for guidance."}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground mb-2">Heart Rate Analysis</p>
-              <p className="text-xs">
-                {metrics.heartRate < 60
-                  ? "Resting heart rate is good. Excellent cardiovascular health indicator."
-                  : metrics.heartRate < 100
-                  ? "Heart rate is within normal range. Continue healthy lifestyle habits."
-                  : "Elevated heart rate. Monitor activity levels and stress."}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground mb-2">Blood Sugar Analysis</p>
-              <p className="text-xs">
-                {metrics.bloodSugar < 100
-                  ? "Blood sugar levels are optimal. Maintain current dietary habits."
-                  : metrics.bloodSugar < 140
-                  ? "Borderline blood sugar. Monitor carbohydrate intake."
-                  : "High blood sugar levels. Consult doctor for dietary adjustments."}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground mb-2">Sleep Quality Analysis</p>
-              <p className="text-xs">
-                {metrics.sleepScore >= 80
-                  ? "Excellent sleep quality. Maintain your current sleep schedule."
-                  : metrics.sleepScore >= 60
-                  ? "Fair sleep quality. Consider improving sleep hygiene."
-                  : "Poor sleep quality. Establish better sleep routine and environment."}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground mb-2">Medication Safety</p>
-              <p className="text-xs">
-                {metrics.medicationRisk < 30
-                  ? "Low medication interaction risk. Current regimen is safe."
-                  : metrics.medicationRisk < 60
-                  ? "Moderate interaction risk. Monitor for side effects."
-                  : "High interaction risk. Consult pharmacist immediately."}
-              </p>
+          <div className="flex-1 p-4 bg-background/50">
+            <div
+              className="h-full min-h-[500px] rounded-lg overflow-hidden relative border border-border"
+            >
+              <iframe
+                ref={iframeRef}
+                title="HeyGen Voice Assistant"
+                src={HEYGEN_EMBED_URL}
+                allow="microphone; camera; autoplay"
+                onLoad={() => setIsEmbedLoaded(true)}
+                className="w-full h-full min-h-[500px] border-0"
+              />
             </div>
           </div>
         </motion.div>
@@ -212,4 +170,4 @@ const HealthVisualization3D = () => {
   );
 };
 
-export default HealthVisualization3D;
+export default VoiceAssistantPage;

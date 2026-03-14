@@ -1,178 +1,170 @@
-import { motion } from "framer-motion";
-import PageTransition from "@/components/PageTransition";
-import { Mic, Phone, AlertCircle } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useRef, useState } from 'react';
+import {
+  Headphones,
+  Maximize2,
+  Mic,
+  MicOff,
+  MessageSquare,
+  Minimize2,
+  Volume2,
+  VolumeX,
+} from 'lucide-react';
+import { motion } from 'framer-motion';
+import PageTransition from '@/components/PageTransition';
 
 const VoiceAssistantPage = () => {
-  const [isCallActive, setIsCallActive] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isEmbedLoaded, setIsEmbedLoaded] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const HEYGEN_EMBED_URL =
+    'https://labs.heygen.com/guest/streaming-embed?share=eyJxdWFsaXR5IjoiaGlnaCIsImF2YXRhck5hbWUiOiJEZXh0ZXJfRG9jdG9yX1NpdHRpbmcyX3B1YmxpYyIsInByZXZpZXdJbWciOiJodHRwczovL2ZpbGVzMi5oZXlnZW4uYWkvYXZhdGFyL3YzL2Y4M2ZmZmM0NWZhYTQzNjhiNmRiOTU5N2U2YjMyM2NhXzQ1NTkwL3ByZXZpZXdfdGFsa18zLndlYnAiLCJuZWVkUmVtb3ZlQmFja2dyb3VuZCI6ZmFsc2UsImtub3dsZWRnZUJhc2VJZCI6ImY0ZGQ1ZWYwYmU1OTQ5YzRiNjk1M2ZiYTIyYTllZDQyIiwidXNlcm5hbWUiOiJiNWM0MTdiZWQzN2I0ZDYzYjBjOTRiNjkwMTZiZmQ2NyJ9&inIFrame=1';
 
-  useEffect(() => {
-    // Load the voice agent widget script
-    const script = document.createElement("script");
-    script.src = "https://voice.ai/app/voice-agent-widget.js";
-    script.async = true;
-    script.onload = () => {
-      console.log("✓ Voice widget script loaded successfully");
-      
-      // Wait for widget to be available and initialize it
-      setTimeout(() => {
-        const widget = document.querySelector("voice-agent-widget") as any;
-        if (widget) {
-          console.log("✓ Widget element found, initializing...");
-          // Set attributes after script loads
-          widget.setAttribute("data-agent-id", "331a3f15-100b-4f03-ada7-745c50b22705");
-          widget.setAttribute("data-api-key", import.meta.env.VITE_VOICE_API_KEY || "");
-        }
-      }, 500);
-    };
-    script.onerror = () => {
-      setError("Failed to load voice widget. Please check your connection.");
-      console.error("✗ Failed to load voice widget script");
-    };
-    document.body.appendChild(script);
+  const postToHeyGen = (action: string) => {
+    iframeRef.current?.contentWindow?.postMessage(
+      {
+        type: 'streaming-embed-control',
+        action,
+      },
+      '*',
+    );
+  };
 
-    return () => {
-      if (document.body.contains(script)) {
-        document.body.removeChild(script);
-      }
-    };
-  }, []);
+  const toggleFullscreen = () => {
+    setIsFullscreen((prev) => !prev);
+  };
+
+  const toggleMute = () => {
+    setIsMuted((prev) => {
+      const next = !prev;
+      postToHeyGen(next ? 'mute' : 'unmute');
+      return next;
+    });
+  };
+
+  const handleStartRecording = async () => {
+    try {
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+      postToHeyGen('start_listening');
+      setIsRecording(true);
+    } catch {
+      setIsRecording(false);
+    }
+  };
+
+  const handleStopRecording = () => {
+    postToHeyGen('stop_listening');
+    setIsRecording(false);
+  };
 
   return (
     <PageTransition>
-      <div className="min-h-screen flex flex-col items-center justify-center p-8 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-        <div className="max-w-4xl w-full flex flex-col items-center gap-8">
-          {/* Information Section */}
-          <motion.div
+      <div className="max-w-6xl mx-auto px-4 py-8 space-y-8">
+        <div className="text-center">
+          <motion.h1
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="w-full text-center mb-4"
+            className="font-display text-3xl md:text-4xl font-bold text-foreground flex items-center justify-center gap-3"
           >
-            <h1 className="text-4xl font-bold text-white mb-4">MediClock AI Voice Assistant</h1>
-            <div className="glass-card p-6 rounded-xl backdrop-blur-lg bg-white/10 border border-white/20">
-              <p className="text-gray-200 mb-4 leading-relaxed">
-                Welcome to your personal AI-powered voice assistant. Get instant medication reminders, health insights, 
-                and personalized medical advice powered by advanced AI technology.
-              </p>
-              <ul className="text-left text-gray-300 space-y-2 inline-block">
-                <li>✓ Voice-activated medication reminders</li>
-                <li>✓ Real-time drug interaction checks</li>
-                <li>✓ Personalized health recommendations</li>
-                <li>✓ 24/7 AI health consultation</li>
-              </ul>
-            </div>
-          </motion.div>
-
-          {/* Avatar with Ripple Effects */}
-          <motion.div
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ delay: 0.2 }}
-            className="relative flex items-center justify-center mt-8"
-          >
-            {/* Ripple Layers - active when call is active */}
-            {isCallActive && (
-              <>
-                <motion.div
-                  className="absolute w-48 h-48 rounded-full border-2 border-blue-400/50"
-                  animate={{ scale: [1, 1.3], opacity: [1, 0] }}
-                  transition={{ duration: 1.5, repeat: Infinity }}
-                />
-                <motion.div
-                  className="absolute w-48 h-48 rounded-full border-2 border-purple-400/30"
-                  animate={{ scale: [1, 1.5], opacity: [1, 0] }}
-                  transition={{ duration: 1.5, repeat: Infinity, delay: 0.3 }}
-                />
-                <motion.div
-                  className="absolute w-48 h-48 rounded-full border-2 border-cyan-400/20"
-                  animate={{ scale: [1, 1.7], opacity: [1, 0] }}
-                  transition={{ duration: 1.5, repeat: Infinity, delay: 0.6 }}
-                />
-              </>
-            )}
-
-            {/* Avatar Circle */}
-            <motion.div
-              className="relative w-40 h-40 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-2xl"
-              animate={isCallActive ? { scale: [1, 1.05, 1] } : { scale: 1 }}
-              transition={{ duration: 0.6, repeat: isCallActive ? Infinity : 0 }}
-            >
-              <Mic className="w-20 h-20 text-white" />
-            </motion.div>
-
-            {/* Speaking Indicator */}
-            {isCallActive && (
-              <motion.div
-                className="absolute top-0 right-0 w-6 h-6 bg-green-500 rounded-full border-3 border-white shadow-lg"
-                animate={{ scale: [1, 1.2, 1] }}
-                transition={{ duration: 0.8, repeat: Infinity }}
-              />
-            )}
-          </motion.div>
-
-          {/* Status Text */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.3 }}
-            className="text-center"
-          >
-            <p className="text-lg text-gray-300 h-8">
-              {isCallActive ? (
-                <span className="flex items-center justify-center gap-2 text-green-400">
-                  <motion.span animate={{ opacity: [0.5, 1] }} transition={{ duration: 0.6, repeat: Infinity }}>
-                    🎤
-                  </motion.span>
-                  Call Active - Speaking...
-                </span>
-              ) : (
-                "Ready to assist you. Click the button below to start."
-              )}
-            </p>
-          </motion.div>
-
-          {/* Error Message */}
-          {error && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="w-full max-w-md flex gap-3 p-4 bg-red-500/20 border border-red-500/50 rounded-lg"
-            >
-              <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
-              <p className="text-red-200 text-sm">{error}</p>
-            </motion.div>
-          )}
-
-          {/* Voice Agent Widget - Embedded */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            className="glass-card p-6 rounded-2xl backdrop-blur-lg bg-white/10 border border-white/20 shadow-2xl"
-          >
-            <div style={{ minHeight: "240px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <voice-agent-widget 
-                data-agent-id="331a3f15-100b-4f03-ada7-745c50b22705"
-                data-start-text="Start Voice Call"
-                data-stop-text="End Call"
-                data-variant="default"
-                data-show-time="true"
-                data-show-mic-status="true"
-                data-width="320"
-                data-height="220"
-                style={{ width: "100%", height: "auto" } as any}>
-              </voice-agent-widget>
-            </div>
-            
-            {/* Error message if widget fails */}
-            {error && (
-              <div style={{ marginTop: "16px", padding: "12px", backgroundColor: "rgba(239, 68, 68, 0.2)", borderRadius: "8px", color: "#fca5a5", fontSize: "14px" }}>
-                {error}
-              </div>
-            )}
-          </motion.div>
+            <Headphones className="text-primary" size={32} />
+            Voice Assistant
+          </motion.h1>
+          <p className="text-muted-foreground mt-2">
+            Speak naturally. The HeyGen assistant listens and responds with voice.
+          </p>
         </div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className={`glass-card overflow-hidden flex flex-col ${isFullscreen ? 'fixed inset-3 z-50 bg-background' : 'min-h-[640px]'}`}
+        >
+          <div className="p-5 border-b border-border bg-muted/30">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center">
+                  <MessageSquare className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <h2 className="font-display font-semibold text-lg text-foreground">
+                    AI Support Assistant
+                  </h2>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <p className="text-xs text-muted-foreground">
+                      Virtual assistant - voice enabled
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={handleStartRecording}
+                  disabled={isRecording || !isEmbedLoaded}
+                  className="p-2 rounded-lg hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Start Recording"
+                >
+                  <Mic className="h-4 w-4 text-muted-foreground" />
+                </button>
+                <button
+                  onClick={handleStopRecording}
+                  disabled={!isRecording || !isEmbedLoaded}
+                  className="p-2 rounded-lg hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Stop Recording"
+                >
+                  <MicOff className="h-4 w-4 text-muted-foreground" />
+                </button>
+                <button
+                  onClick={toggleMute}
+                  className="p-2 rounded-lg hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={!isEmbedLoaded}
+                  title={isMuted ? 'Unmute' : 'Mute'}
+                >
+                  {isMuted ? (
+                    <VolumeX className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <Volume2 className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </button>
+                <button
+                  onClick={toggleFullscreen}
+                  className="p-2 rounded-lg hover:bg-muted transition-colors"
+                  title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+                >
+                  {isFullscreen ? (
+                    <Minimize2 className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <Maximize2 className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-3 flex items-center gap-2">
+              <span className={`w-2 h-2 rounded-full ${isRecording ? 'bg-red-500 animate-pulse' : 'bg-muted-foreground/40'}`} />
+              <p className="text-xs text-muted-foreground">
+                {isRecording ? 'Mic recording on - assistant is listening' : 'Mic idle - press Record to start voice input'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex-1 p-4 bg-background/50">
+            <div
+              className="h-full min-h-[500px] rounded-lg overflow-hidden relative border border-border"
+            >
+              <iframe
+                ref={iframeRef}
+                title="HeyGen Voice Assistant"
+                src={HEYGEN_EMBED_URL}
+                allow="microphone; camera; autoplay"
+                onLoad={() => setIsEmbedLoaded(true)}
+                className="w-full h-full min-h-[500px] border-0"
+              />
+            </div>
+          </div>
+        </motion.div>
       </div>
     </PageTransition>
   );
