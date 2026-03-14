@@ -12,15 +12,23 @@ const computeDurationSeconds = (startedAt, endedAt) => {
   return Math.max(0, Math.round((endedAt.getTime() - startedAt.getTime()) / 1000));
 };
 
-export const registerCallSignaling = (io) => {
+export const registerCallSignaling = (io, connectedUsers = {}) => {
   io.on('connection', (socket) => {
+    console.log(`🔌 Socket connected: ${socket.id}`);
+    
     socket.on('user:register', async ({ userId }) => {
       if (!userId) {
+        console.error("❌ User registration failed: no userId provided");
         return;
       }
 
       socket.data.userId = userId;
+      connectedUsers[userId] = socket.id;
       socket.join(userRoom(userId));
+      
+      console.log(`✅ User registered: ${userId} (socket: ${socket.id})`);
+      console.log(`📊 Connected users:`, Object.keys(connectedUsers));
+      
       socket.emit('user:registered', { userId });
 
       // If a call was initiated before this user socket became active,
@@ -58,28 +66,35 @@ export const registerCallSignaling = (io) => {
           calleeRole = 'doctor',
         } = payload || {};
 
+        console.log(`📞 Call initiation requested: ${callerId} (${callerRole}) → ${calleeId} (${calleeRole})`);
+
         if (!callerId || !calleeId || !callerName) {
+          console.error("❌ Invalid call parameters");
           ack?.({ ok: false, error: 'callerId, callerName and calleeId are required' });
           return;
         }
 
         if (!mongoose.isValidObjectId(callerId) || !mongoose.isValidObjectId(calleeId)) {
+          console.error("❌ Invalid MongoDB ObjectIds");
           ack?.({ ok: false, error: 'callerId and calleeId must be valid MongoDB ObjectIds' });
           return;
         }
 
         const roomName = buildRoomName(callerId);
 
-        const calleeRoom = io.sockets.adapter.rooms.get(userRoom(calleeId));
-        const calleeOnline = !!calleeRoom && calleeRoom.size > 0;
-
-        if (!calleeOnline) {
+        // Check if callee is registered in connectedUsers
+        const calleeSocketId = connectedUsers[calleeId];
+        if (!calleeSocketId) {
+          console.error(`❌ Callee ${calleeId} is not connected`);
+          console.log(`📋 Available users: ${Object.keys(connectedUsers).join(', ') || '(none)'}`);
           ack?.({
             ok: false,
             error: 'The target user is offline or not on the video page. Ask them to open Video Call first.',
           });
           return;
         }
+        
+        console.log(`✅ Callee ${calleeId} found with socket ${calleeSocketId}`);
 
         const call = await Call.create({
           callerId,
@@ -102,8 +117,13 @@ export const registerCallSignaling = (io) => {
           status: call.status,
         };
 
+        // Emit to both user rooms and direct socket
         io.to(userRoom(calleeId)).emit('call:incoming', eventPayload);
+        io.to(calleeSocketId).emit('call:incoming', eventPayload);
         io.to(userRoom(callerId)).emit('call:ringing', eventPayload);
+        
+        console.log(`📤 call:incoming sent to callee ${calleeId} (socket: ${calleeSocketId})`);
+        console.log(`📤 call:ringing sent to caller ${callerId}`);
 
         ack?.({ ok: true, call: eventPayload });
       } catch (error) {
@@ -236,6 +256,16 @@ export const registerCallSignaling = (io) => {
         ack?.({ ok: true, message });
       } catch (error) {
         ack?.({ ok: false, error: error.message });
+      }
+    });
+
+    socket.on('disconnect', () => {
+      // Remove user from connected users
+      const userId = socket.data.userId;
+      if (userId) {
+        delete connectedUsers[userId];
+        console.log(`🛑 User disconnected: ${userId}`);
+        console.log(`📋 Connected users now: ${Object.keys(connectedUsers).join(', ') || '(none)'}`);
       }
     });
   });
