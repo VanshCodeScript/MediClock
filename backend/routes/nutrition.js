@@ -2,6 +2,7 @@ import express from "express";
 import multer from "multer";
 import Groq from "groq-sdk";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import sharp from "sharp";
 
 const router = express.Router();
 
@@ -14,6 +15,22 @@ const NUTRITION_PROMPT = `You are a nutrition analysis AI. Analyze the food in t
 Identify food items, estimate portion sizes, and calculate approximate nutrition values.
 Return ONLY a valid JSON object, no markdown, no explanation:
 {"foodItems":["item1","item2"],"calories":number,"protein":number,"carbs":number,"fat":number}`;
+
+// Convert image to JPEG if needed (Groq supports JPEG/PNG better)
+async function convertImageToJpeg(imageBuffer, mimeType) {
+  if (mimeType === "image/jpeg" || mimeType === "image/png") {
+    return { buffer: imageBuffer, mimeType };
+  }
+
+  try {
+    console.log(`🔄 Converting ${mimeType} to JPEG...`);
+    const jpegBuffer = await sharp(imageBuffer).jpeg({ quality: 90 }).toBuffer();
+    return { buffer: jpegBuffer, mimeType: "image/jpeg" };
+  } catch (error) {
+    console.warn(`⚠️ Conversion failed: ${error.message}, using original`);
+    return { buffer: imageBuffer, mimeType };
+  }
+}
 
 // --- Groq (primary) ---
 async function analyzeWithGroq(imageBase64, mimeType) {
@@ -66,19 +83,24 @@ router.post("/analyze-meal", upload.single("image"), async (req, res) => {
 
     console.log("📷 Image received:", req.file.originalname, "size:", req.file.size, "mime:", req.file.mimetype);
 
-    const imageBase64 = req.file.buffer.toString("base64");
-    const mimeType = req.file.mimetype;
+    // Convert image to JPEG for better compatibility with Groq
+    const { buffer: convertedBuffer, mimeType: convertedMimeType } = await convertImageToJpeg(
+      req.file.buffer,
+      req.file.mimetype
+    );
+
+    const imageBase64 = convertedBuffer.toString("base64");
     const startTime = Date.now();
     let text;
 
     // Try Groq first, fall back to Gemini
     try {
-      text = await analyzeWithGroq(imageBase64, mimeType);
+      text = await analyzeWithGroq(imageBase64, convertedMimeType);
       console.log(`✅ Groq responded in ${Date.now() - startTime}ms`);
     } catch (groqErr) {
       console.warn("⚠️ Groq failed:", groqErr.message);
       console.log("🔄 Falling back to Gemini...");
-      text = await analyzeWithGemini(imageBase64, mimeType);
+      text = await analyzeWithGemini(imageBase64, convertedMimeType);
       console.log(`✅ Gemini responded in ${Date.now() - startTime}ms`);
     }
 

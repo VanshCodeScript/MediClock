@@ -71,7 +71,7 @@ const NutritionPage = () => {
       const formData = new FormData();
       formData.append("image", selectedFile);
 
-      const res = await fetch("http://localhost:5000/api/nutrition/analyze-meal", {
+      const res = await fetch("http://localhost:5001/api/nutrition/analyze-meal", {
         method: "POST",
         body: formData,
       });

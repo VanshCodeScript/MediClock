@@ -24,7 +24,7 @@ export const connectDB = async () => {
     setTimeout(() => {
       console.log('Retrying connection...');
       connectDB();
-    }, 5000);
+    }, 5001);
   }
 };
 

@@ -1,5 +1,5 @@
 // API service for connecting frontend to backend
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = 'http://localhost:5001/api';
 
 // Create axios-like fetch wrapper
 export const api = {

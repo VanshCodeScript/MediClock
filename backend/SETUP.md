@@ -43,7 +43,7 @@ npm run dev
 
 ## Running Both Services
 
-### Terminal 1 - Backend (port 5000)
+### Terminal 1 - Backend (port 5001)
 ```bash
 cd backend
 npm run dev
@@ -59,7 +59,7 @@ npm run dev
 
 Once both are running:
 
-1. **Backend health check:** http://localhost:5000/api/health
+1. **Backend health check:** http://localhost:5001/api/health
 2. **Frontend:** http://localhost:8080
 
 The frontend API service is ready to make calls to the backend!

@@ -17,7 +17,7 @@ Edit the `.env` file with your MongoDB credentials:
 
 ```
 MONGODB_URI=mongodb+srv://ankitxyz804_db_user:YOUR_PASSWORD@cluster0.jcq1wvj.mongodb.net/?appName=Cluster0
-PORT=5000
+PORT=5001
 NODE_ENV=development
 JWT_SECRET=your_jwt_secret_key_here
 ```
@@ -36,11 +36,11 @@ npm run dev
 npm start
 ```
 
-The server will start on `http://localhost:5000`
+The server will start on `http://localhost:5001`
 
 ### 4. Test the Connection
 
-Visit `http://localhost:5000/api/health` to verify the server is running.
+Visit `http://localhost:5001/api/health` to verify the server is running.
 
 ## API Endpoints
 
