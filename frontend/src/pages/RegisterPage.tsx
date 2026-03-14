@@ -4,7 +4,20 @@ import { Activity, ArrowRight } from "lucide-react";
 import PageTransition from "@/components/PageTransition";
 import { useState } from "react";
 
-const API_BASE = "http://localhost:5001/api";
+const getApiBaseUrl = () => {
+  const envBase = import.meta.env.VITE_API_BASE_URL;
+  if (envBase) {
+    return String(envBase).replace(/\/$/, "");
+  }
+
+  if (typeof window !== "undefined") {
+    return `${window.location.protocol}//${window.location.hostname}:5001/api/v1`;
+  }
+
+  return "http://localhost:5001/api/v1";
+};
+
+const API_BASE = getApiBaseUrl();
 const steps = ["Personal Info", "Health Details", "Lifestyle"];
 
 const RegisterPage = () => {

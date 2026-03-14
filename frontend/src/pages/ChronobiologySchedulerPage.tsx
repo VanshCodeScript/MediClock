@@ -5,7 +5,20 @@ import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 import { getOrCreateCurrentUserId } from "@/lib/userSession";
 
-const API_BASE = "http://localhost:5001/api";
+const getApiBaseUrl = () => {
+  const envBase = import.meta.env.VITE_API_BASE_URL;
+  if (envBase) {
+    return String(envBase).replace(/\/$/, "");
+  }
+
+  if (typeof window !== "undefined") {
+    return `${window.location.protocol}//${window.location.hostname}:5001/api/v1`;
+  }
+
+  return "http://localhost:5001/api/v1";
+};
+
+const API_BASE = getApiBaseUrl();
 
 // Circadian timeline data for 24-hour view
 const generateCircadianTimeline = () => {

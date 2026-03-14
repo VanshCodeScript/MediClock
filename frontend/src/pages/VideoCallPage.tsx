@@ -15,7 +15,7 @@ const resolveSocketBase = () => {
 
   const envApiBase = import.meta.env.VITE_API_BASE_URL;
   if (envApiBase) {
-    return String(envApiBase).replace(/\/api\/?$/, "").replace(/\/$/, "");
+    return String(envApiBase).replace(/\/api(?:\/v1)?\/?$/, "").replace(/\/$/, "");
   }
 
   if (typeof window !== "undefined") {

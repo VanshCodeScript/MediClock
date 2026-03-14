@@ -25,6 +25,7 @@ import medicationSchedulerRouter from './routes/medication-scheduler.js';
 import circadianInsightsRouter from './routes/circadian-insights.js';
 import sosRouter from './routes/sos.js';
 import videoRouter from './routes/video.js';
+import wearablesRouter from './routes/wearables.js';
 import { registerCallSignaling } from './socket/callSignaling.js';
 import { startReminderAutomation } from './services/reminderAutomation.js';
 
@@ -34,51 +35,63 @@ const app = express();
 const httpServer = http.createServer(app);
 const PORT = process.env.PORT || 5001;
 
-// Manual allow-list: add trusted LAN IPs here (for example your doctor's device IP).
-const ALLOWED_IPS = [
-  '10.0.10.227',"10.0.8.185","10.255.255.255"
-  // '10.0.10.150', // Example: doctor device IP
-];
-
-const CLIENT_PORTS = [8080, 8081, 5173];
-const ipBasedOrigins = ALLOWED_IPS.flatMap((ip) =>
-  CLIENT_PORTS.flatMap((port) => [`http://${ip}:${port}`, `https://${ip}:${port}`])
-);
+const CLIENT_PORTS = [8080, 8080, 5173];
 
 const envOrigins = String(process.env.CORS_ORIGIN || '')
   .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean);
 
-const allowedOrigins = Array.from(
-  new Set(
-    [
-      ...envOrigins,
-      'http://localhost:8080',
-      'http://localhost:8081',
-      'http://127.0.0.1:8080',
-      'http://127.0.0.1:8081',
-      'http://localhost:5173',
-      ...ipBasedOrigins,
-    ].filter(Boolean)
-  )
+const staticAllowedOrigins = Array.from(
+  new Set([
+    ...envOrigins,
+    'http://localhost:8080',
+    'http://localhost:8080',
+    'http://localhost:5173',
+    'http://127.0.0.1:8080',
+    'http://127.0.0.1:8080',
+    'http://127.0.0.1:5173',
+  ])
 );
+
+const isLanOrigin = (origin = '') => {
+  return /^https?:\/\/(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})(:\d+)?$/i.test(origin);
+};
+
+const isTryCloudflareOrigin = (origin = '') => {
+  return /^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/i.test(origin);
+};
+
+const corsOrigin = (origin, callback) => {
+  if (!origin) {
+    callback(null, true);
+    return;
+  }
+
+  if (staticAllowedOrigins.includes(origin) || isLanOrigin(origin) || isTryCloudflareOrigin(origin)) {
+    callback(null, true);
+    return;
+  }
+
+  callback(new Error(`CORS blocked for origin: ${origin}`));
+};
+
 const io = new SocketIOServer(httpServer, {
   cors: {
-    origin: allowedOrigins,
+    origin: corsOrigin,
     credentials: true,
   },
   transports: ['websocket', 'polling'],
 });
 
 // Track connected users by userId
-const connectedUsers = {};
+const connectedUsers = new Map();
 
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cors({
-  origin: allowedOrigins,
+  origin: corsOrigin,
   credentials: true,
 }));
 
@@ -90,43 +103,91 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'Server is running', timestamp: new Date() });
 });
 
+app.get('/api/v1/health', (req, res) => {
+  res.json({ status: 'Server is running', timestamp: new Date() });
+});
+
+app.get('/api/location', (req, res) => {
+  res.json({ status: 'ok', location: 'unknown', timestamp: new Date() });
+});
+
+app.get('/api/v1/location', (req, res) => {
+  res.json({ status: 'ok', location: 'unknown', timestamp: new Date() });
+});
+
+app.get('/health', (req, res) => {
+  res.json({ status: 'Server is running', timestamp: new Date() });
+});
+
+app.get('/', (req, res) => {
+  res.json({ status: 'MediClock backend online', timestamp: new Date() });
+});
+
 // Pass connectedUsers to socket signaling
 registerCallSignaling(io, connectedUsers);
 
 // Auth Routes
 app.use('/api/auth', authRouter);
+app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/video', videoRouter);
 
 // Core Routes
 app.use('/api/users', usersRouter);
+app.use('/api/v1/users', usersRouter);
 app.use('/api/medications', medicationsRouter);
+app.use('/api/v1/medications', medicationsRouter);
 app.use('/api/reminders', remindersRouter);
+app.use('/api/v1/reminders', remindersRouter);
 app.use('/api/nutrition', nutritionRouter);
+app.use('/api/v1/nutrition', nutritionRouter);
 
 // Health & Wellness Routes
 app.use('/api/meals', mealsRouter);
+app.use('/api/v1/meals', mealsRouter);
 app.use('/api/health-metrics', healthMetricsRouter);
+app.use('/api/v1/health-metrics', healthMetricsRouter);
 app.use('/api/sleep', sleepRouter);
+app.use('/api/v1/sleep', sleepRouter);
 app.use('/api/circadian-rhythm', circadianRhythmRouter);
+app.use('/api/v1/circadian-rhythm', circadianRhythmRouter);
 
 // Emergency & Safety Routes
 app.use('/api/emergency-contacts', emergencyContactsRouter);
+app.use('/api/v1/emergency-contacts', emergencyContactsRouter);
 app.use('/api/sos', sosRouter);
+app.use('/api/v1/sos', sosRouter);
 app.use('/api/qr-cards', qrCardsRouter);
+app.use('/api/v1/qr-cards', qrCardsRouter);
+
+// Alerts compatibility endpoint requested by tunnel clients.
+app.get('/api/v1/alerts', (req, res) => {
+  const limit = req.query.limit || 20;
+  return res.redirect(307, `/api/sos/alerts?limit=${encodeURIComponent(String(limit))}`);
+});
 
 // Medical Routes
 app.use('/api/drug-interactions', drugInteractionsRouter);
+app.use('/api/v1/drug-interactions', drugInteractionsRouter);
 app.use('/api/medication-adherence', medicationAdherenceRouter);
+app.use('/api/v1/medication-adherence', medicationAdherenceRouter);
 app.use('/api/video-sessions', videoSessionsRouter);
+app.use('/api/v1/video-sessions', videoSessionsRouter);
 
 // AI & Insights Routes
 app.use('/api/health-insights', healthInsightsRouter);
+app.use('/api/v1/health-insights', healthInsightsRouter);
 app.use('/api/notifications', notificationsRouter);
+app.use('/api/v1/notifications', notificationsRouter);
+app.use('/api/wearables', wearablesRouter);
+app.use('/api/v1/wearables', wearablesRouter);
 
 // Chronobiology & Scheduling Routes
 app.use('/api/circadian-profile', circadianProfileRouter);
+app.use('/api/v1/circadian-profile', circadianProfileRouter);
 app.use('/api/medication-scheduler', medicationSchedulerRouter);
+app.use('/api/v1/medication-scheduler', medicationSchedulerRouter);
 app.use('/api/circadian-insights', circadianInsightsRouter);
+app.use('/api/v1/circadian-insights', circadianInsightsRouter);
 
 // 404 handler
 app.use((req, res) => {

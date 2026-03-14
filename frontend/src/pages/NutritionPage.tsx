@@ -4,6 +4,21 @@ import { Apple, Plus, Camera, Upload, Sparkles, Loader2, UtensilsCrossed, Flame,
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { useState, useRef, useCallback, useEffect } from "react";
 
+const getApiBaseUrl = () => {
+  const envBase = import.meta.env.VITE_API_BASE_URL;
+  if (envBase) {
+    return String(envBase).replace(/\/$/, "");
+  }
+
+  if (typeof window !== "undefined") {
+    return `${window.location.protocol}//${window.location.hostname}:5001/api/v1`;
+  }
+
+  return "http://localhost:5001/api/v1";
+};
+
+const API_BASE = getApiBaseUrl();
+
 const initialMeals = [
   { type: "Breakfast", time: "8:00 AM", items: "Oatmeal, banana, green tea", cal: 350 },
   { type: "Lunch", time: "1:00 PM", items: "Grilled chicken salad, quinoa", cal: 550 },
@@ -168,7 +183,7 @@ const NutritionPage = () => {
       const formData = new FormData();
       formData.append("image", selectedFile);
 
-      const res = await fetch("http://localhost:5001/api/nutrition/analyze-meal", {
+      const res = await fetch(`${API_BASE}/nutrition/analyze-meal`, {
         method: "POST",
         body: formData,
       });
