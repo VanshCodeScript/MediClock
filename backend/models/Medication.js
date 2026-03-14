@@ -35,6 +35,10 @@ const medicationSchema = new mongoose.Schema(
       enum: ['active', 'inactive', 'completed'],
       default: 'active',
     },
+    reminderTimes: {
+      type: [String], // Array of "HH:MM" strings, e.g. ["08:00", "20:00"]
+      default: [],
+    },
   },
   {
     timestamps: true,

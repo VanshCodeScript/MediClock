@@ -111,6 +111,10 @@ export const api = {
 
   // Reminders
   reminders: {
+    today: async (userId: string) => {
+      const response = await fetch(`${API_BASE_URL}/reminders/today/${userId}`);
+      return response.json();
+    },
     create: async (reminderData) => {
       const response = await fetch(`${API_BASE_URL}/reminders`, {
         method: 'POST',

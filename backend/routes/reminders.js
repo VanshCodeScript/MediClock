@@ -14,6 +14,54 @@ router.post('/', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/reminders/today/:userId
+ * Returns today's reminders as a flat list with status derived from the
+ * current time (pending / taken / missed).
+ */
+router.get('/today/:userId', async (req, res) => {
+  try {
+    const reminders = await Reminder.find({
+      userId: req.params.userId,
+      status: 'active',
+    })
+      .populate('medicationId', 'name dosage')
+      .lean();
+
+    const nowMinutes = (() => {
+      const d = new Date();
+      return d.getHours() * 60 + d.getMinutes();
+    })();
+
+    const mapped = reminders.map((r) => {
+      const [hh, mm] = (r.time || '00:00').split(':').map(Number);
+      const reminderMinutes = hh * 60 + mm;
+
+      let status = 'pending';
+      if (r.isCompleted) {
+        status = 'taken';
+      } else if (reminderMinutes < nowMinutes) {
+        status = 'missed';
+      }
+
+      return {
+        _id: r._id,
+        medicineName: r.medicationId?.name ?? 'Unknown',
+        dosage: r.medicationId?.dosage ?? '',
+        time: r.time,
+        status,
+      };
+    });
+
+    // Sort earliest first
+    mapped.sort((a, b) => a.time.localeCompare(b.time));
+
+    res.json(mapped);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get all reminders for a user
 router.get('/user/:userId', async (req, res) => {
   try {
