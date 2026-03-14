@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 import { getOrCreateCurrentUserId } from "@/lib/userSession";
 
-const API_BASE = "http://localhost:5000/api";
+const API_BASE = "http://localhost:5001/api";
 
 // Circadian timeline data for 24-hour view
 const generateCircadianTimeline = () => {
@@ -309,7 +309,7 @@ const ChronobiologyMedicationScheduler = () => {
                     AI Circadian Insights
                   </h3>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Generate fresh LLM insights from your current wake/sleep and meal timings.
+                     
                   </p>
                 </div>
                 <motion.button

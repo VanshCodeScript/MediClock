@@ -3,7 +3,7 @@ import PageTransition from "@/components/PageTransition";
 import { AlertOctagon, Phone, MapPin, Heart, User, Shield, Loader2, CheckCircle, XCircle, History } from "lucide-react";
 import { useState, useEffect } from "react";
 
-const API_URL = "http://localhost:5000/api";
+const API_URL = "http://localhost:5001/api";
 
 interface SOSAlert {
   id: string;
