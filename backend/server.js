@@ -1,6 +1,6 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import { connectDB } from './db.js';
 import usersRouter from './routes/users.js';
 import medicationsRouter from './routes/medications.js';
@@ -16,8 +16,9 @@ import qrCardsRouter from './routes/qr-cards.js';
 import circadianRhythmRouter from './routes/circadian-rhythm.js';
 import medicationAdherenceRouter from './routes/medication-adherence.js';
 import notificationsRouter from './routes/notifications.js';
+import nutritionRouter from './routes/nutrition.js';
 
-dotenv.config();
+console.log("🔑 Gemini API Key loaded:", process.env.GEMINI_API_KEY ? "YES" : "NO");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -42,6 +43,7 @@ app.get('/api/health', (req, res) => {
 app.use('/api/users', usersRouter);
 app.use('/api/medications', medicationsRouter);
 app.use('/api/reminders', remindersRouter);
+app.use('/api/nutrition', nutritionRouter);
 
 // Health & Wellness Routes
 app.use('/api/meals', mealsRouter);
