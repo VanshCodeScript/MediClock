@@ -21,7 +21,7 @@ const HealthVisualization3D = () => {
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           className="glass-card overflow-hidden rounded-2xl"
-          style={{ height: "70vh" }}
+          style={{ height: "62vh" }}
         >
           <HealthAvatar className="w-full h-full" />
         </motion.div>
