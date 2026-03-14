@@ -45,6 +45,22 @@ const LoginPage = () => {
     }
   };
 
+  const quickLogin = (userRole: "patient" | "doctor") => {
+    // Direct login for testing - no API call needed
+    const mockUser = {
+      _id: "test_" + userRole + "_" + Date.now(),
+      name: userRole === "doctor" ? "Dr. Test" : "Test Patient",
+      email: userRole === "doctor" ? "doctor@test.com" : "patient@test.com",
+      role: userRole,
+    };
+
+    localStorage.setItem("mediclock_token", "test_token_" + Date.now());
+    localStorage.setItem("mediclock_user", JSON.stringify(mockUser));
+    localStorage.setItem("mediclock_user_id", mockUser._id);
+
+    navigate(userRole === "doctor" ? "/doctor-dashboard" : "/dashboard");
+  };
+
   return (
     <PageTransition className="min-h-screen flex">
       {/* Left panel */}
@@ -137,6 +153,30 @@ const LoginPage = () => {
                 className="w-full px-4 py-3 rounded-xl bg-muted border border-border focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm"
               />
             </div>
+
+            {/* Quick Login for Testing */}
+            <div className="border-t border-border pt-4">
+              <p className="text-xs text-muted-foreground mb-2 font-medium">Quick Login (Testing)</p>
+              <div className="grid grid-cols-2 gap-2">
+                <motion.button
+                  type="button"
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => quickLogin("patient")}
+                  className="px-3 py-2 text-xs rounded-lg bg-accent hover:bg-accent/80 text-foreground font-medium transition-colors"
+                >
+                  Test Patient
+                </motion.button>
+                <motion.button
+                  type="button"
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => quickLogin("doctor")}
+                  className="px-3 py-2 text-xs rounded-lg bg-accent hover:bg-accent/80 text-foreground font-medium transition-colors"
+                >
+                  Test Doctor
+                </motion.button>
+              </div>
+            </div>
+
             <motion.button
               type="submit"
               disabled={loading}
