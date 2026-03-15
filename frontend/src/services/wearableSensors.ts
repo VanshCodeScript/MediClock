@@ -1,6 +1,6 @@
 import { api } from '@/lib/api';
 
-export type ActivityLevel = 'resting' | 'walking' | 'running';
+export type ActivityLevel = 'idle' | 'walking' | 'running';
 
 export type WearableSnapshot = {
   steps: number;
@@ -22,32 +22,30 @@ type IOSDeviceMotionEvent = typeof DeviceMotionEvent & {
 };
 
 const TRANSMIT_INTERVAL_MS = 30 * 1000;
-const MIN_STEP_INTERVAL_MS = 280;
-const MAX_STEP_INTERVAL_MS = 1600;
-const MIN_STEP_THRESHOLD = 0.35;
-const STEP_RELEASE_RATIO = 0.58;
-const GRAVITY_SMOOTHING_ALPHA = 0.92;
-const MOVEMENT_SMOOTHING_ALPHA = 0.7;
-const DYNAMIC_THRESHOLD_MULTIPLIER = 1.45;
+const PROCESS_INTERVAL_MS = 200;
+const STEP_THRESHOLD = 11.5;
+const STEP_DEBOUNCE_MS = 300;
+const IDLE_THRESHOLD = 10.2;
+const GRAVITY_SMOOTHING_ALPHA = 0.9;
+const MOVEMENT_SMOOTHING_ALPHA = 0.75;
 const EARTH_GRAVITY = 9.81;
-const MOTION_WINDOW_SIZE = 24;
+const MAX_MOVEMENT_SCORE = 20;
 
 const classifyActivityLevel = (movementScore: number): ActivityLevel => {
-  if (movementScore < 5) return 'resting';
-  if (movementScore < 15) return 'walking';
+  if (movementScore < 1.5) return 'idle';
+  if (movementScore <= 4) return 'walking';
   return 'running';
 };
 
 class WearableSensorsService {
   private steps = 0;
   private movementScore = 0;
-  private activityLevel: ActivityLevel = 'resting';
+  private activityLevel: ActivityLevel = 'idle';
+  private lastProcessTimestamp = 0;
   private lastStepTimestamp = 0;
-  private lastCadenceStepTimestamp = 0;
+  private previousMagnitude = EARTH_GRAVITY;
   private gravityBaseline = EARTH_GRAVITY;
   private smoothedLinearMovement = 0;
-  private peakArmed = false;
-  private motionSamples: number[] = [];
   private transmitIntervalId: number | null = null;
   private running = false;
   private permissionState: MotionPermissionState = 'default';
@@ -55,6 +53,12 @@ class WearableSensorsService {
   private onError: ((message: string) => void) | null = null;
 
   private readonly handleMotionEvent = (event: DeviceMotionEvent) => {
+    const now = Date.now();
+    if (now - this.lastProcessTimestamp < PROCESS_INTERVAL_MS) {
+      return;
+    }
+    this.lastProcessTimestamp = now;
+
     const acceleration = event.accelerationIncludingGravity;
     if (!acceleration) {
       return;
@@ -73,57 +77,21 @@ class WearableSensorsService {
       MOVEMENT_SMOOTHING_ALPHA * this.smoothedLinearMovement +
       (1 - MOVEMENT_SMOOTHING_ALPHA) * linearMovement;
 
-    this.motionSamples.push(this.smoothedLinearMovement);
-    if (this.motionSamples.length > MOTION_WINDOW_SIZE) {
-      this.motionSamples.shift();
-    }
-
-    const averageMovement =
-      this.motionSamples.reduce((sum, value) => sum + value, 0) /
-      Math.max(this.motionSamples.length, 1);
-
-    this.movementScore = Number((averageMovement * 12).toFixed(2));
+    this.movementScore = Number(
+      Math.min(MAX_MOVEMENT_SCORE, this.smoothedLinearMovement * 10).toFixed(2)
+    );
     this.activityLevel = classifyActivityLevel(this.movementScore);
 
-    const dynamicThreshold = Math.max(MIN_STEP_THRESHOLD, averageMovement * DYNAMIC_THRESHOLD_MULTIPLIER);
-    const now = Date.now();
-    const deltaSinceLastStep = now - this.lastStepTimestamp;
+    const crossedThreshold = this.previousMagnitude <= STEP_THRESHOLD && magnitude > STEP_THRESHOLD;
+    const notIdle = magnitude >= IDLE_THRESHOLD;
+    const stepDebounced = now - this.lastStepTimestamp > STEP_DEBOUNCE_MS;
 
-    if (!this.peakArmed && this.smoothedLinearMovement >= dynamicThreshold) {
-      this.peakArmed = true;
-    }
-
-    if (this.peakArmed && this.smoothedLinearMovement <= dynamicThreshold * STEP_RELEASE_RATIO) {
-      const isFirstStep = this.lastStepTimestamp === 0;
-      if (
-        isFirstStep ||
-        (deltaSinceLastStep >= MIN_STEP_INTERVAL_MS && deltaSinceLastStep <= MAX_STEP_INTERVAL_MS)
-      ) {
-        this.steps += 1;
-        this.lastStepTimestamp = now;
-        this.lastCadenceStepTimestamp = now;
-      }
-      this.peakArmed = false;
-    }
-
-    // Fallback for devices where devicemotion peaks do not cross/release reliably.
-    const cadenceIntervalMs = this.activityLevel === 'running' ? 360 : 560;
-    const cadenceMovementGate = this.activityLevel === 'running' ? 1.2 : 0.7;
-    const noRecentStep = now - this.lastStepTimestamp > 1800;
-    const cadenceEligible =
-      this.activityLevel !== 'resting' &&
-      this.smoothedLinearMovement >= cadenceMovementGate &&
-      now - this.lastCadenceStepTimestamp >= cadenceIntervalMs;
-
-    if (noRecentStep && cadenceEligible) {
+    if (notIdle && crossedThreshold && stepDebounced) {
       this.steps += 1;
       this.lastStepTimestamp = now;
-      this.lastCadenceStepTimestamp = now;
     }
 
-    if (this.peakArmed && deltaSinceLastStep > MAX_STEP_INTERVAL_MS * 2) {
-      this.peakArmed = false;
-    }
+    this.previousMagnitude = magnitude;
 
     this.emitUpdate();
   };
@@ -208,19 +176,19 @@ class WearableSensorsService {
     }
 
     this.running = false;
-    this.peakArmed = false;
-    this.lastCadenceStepTimestamp = 0;
+    this.lastProcessTimestamp = 0;
+    this.lastStepTimestamp = 0;
+    this.previousMagnitude = EARTH_GRAVITY;
     this.gravityBaseline = EARTH_GRAVITY;
     this.smoothedLinearMovement = 0;
-    this.motionSamples = [];
   }
 
   private beginListeners() {
-    this.peakArmed = false;
-    this.lastCadenceStepTimestamp = 0;
+    this.lastProcessTimestamp = 0;
+    this.lastStepTimestamp = 0;
+    this.previousMagnitude = EARTH_GRAVITY;
     this.gravityBaseline = EARTH_GRAVITY;
     this.smoothedLinearMovement = 0;
-    this.motionSamples = [];
 
     window.addEventListener('devicemotion', this.handleMotionEvent, { passive: true });
 
@@ -237,7 +205,29 @@ class WearableSensorsService {
   private async transmitSnapshot() {
     try {
       const snapshot = this.getSnapshot();
+      const userId = localStorage.getItem('mediclock_user_id');
+
+      if (!userId) {
+        this.onError?.('User session not found. Please login again to upload wearable data.');
+        return;
+      }
+
+      if (!Number.isFinite(snapshot.steps) || snapshot.steps < 0) {
+        this.onError?.('Invalid step data detected. Upload skipped.');
+        return;
+      }
+
+      if (
+        !Number.isFinite(snapshot.movementScore) ||
+        snapshot.movementScore < 0 ||
+        snapshot.movementScore > MAX_MOVEMENT_SCORE
+      ) {
+        this.onError?.('Invalid movement score detected. Upload skipped.');
+        return;
+      }
+
       await api.wearables.update({
+        userId,
         steps: snapshot.steps,
         activityLevel: snapshot.activityLevel,
         movementScore: snapshot.movementScore,
@@ -268,16 +258,6 @@ class WearableSensorsService {
   private needsExplicitPermission() {
     const motionEvent = DeviceMotionEvent as IOSDeviceMotionEvent;
     return typeof motionEvent.requestPermission === 'function';
-  }
-
-  private isMobileDevice() {
-    const ua = navigator.userAgent || navigator.vendor || '';
-    if (/Android|iPhone|iPad|iPod|Mobile/i.test(ua)) {
-      return true;
-    }
-
-    // iPadOS sometimes reports desktop-class UA; touch capability is a better signal.
-    return Number(navigator.maxTouchPoints || 0) > 1;
   }
 }
 

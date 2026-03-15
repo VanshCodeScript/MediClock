@@ -16,9 +16,9 @@ const wearableDataSchema = new mongoose.Schema(
     },
     activityLevel: {
       type: String,
-      enum: ['resting', 'walking', 'running'],
+      enum: ['idle', 'walking', 'running'],
       required: true,
-      default: 'resting',
+      default: 'idle',
     },
     movementScore: {
       type: Number,

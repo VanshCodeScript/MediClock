@@ -294,10 +294,31 @@ export const api = {
   // Wearables
   wearables: {
     update: async (wearableData) => {
+      const userId = String(wearableData?.userId || '').trim();
+      const steps = Number(wearableData?.steps);
+      const movementScore = Number(wearableData?.movementScore);
+
+      if (!userId) {
+        throw new Error('Invalid wearable payload: userId is required');
+      }
+
+      if (!Number.isFinite(steps) || steps < 0) {
+        throw new Error('Invalid wearable payload: steps must be a non-negative number');
+      }
+
+      if (!Number.isFinite(movementScore) || movementScore < 0 || movementScore > 20) {
+        throw new Error('Invalid wearable payload: movementScore out of range');
+      }
+
       const response = await fetch(`${API_BASE_URL}/wearables/update`, {
         method: 'POST',
         headers: authHeaders(),
-        body: JSON.stringify(wearableData),
+        body: JSON.stringify({
+          ...wearableData,
+          userId,
+          steps: Math.round(steps),
+          movementScore: Number(movementScore.toFixed(2)),
+        }),
       });
 
       const payload = await response.json().catch(() => ({}));

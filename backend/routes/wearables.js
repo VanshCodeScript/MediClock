@@ -4,15 +4,25 @@ import protect from '../middleware/authMiddleware.js';
 import WearableData from '../models/WearableData.js';
 
 const router = express.Router();
-const ACTIVITY_LEVELS = new Set(['resting', 'walking', 'running']);
+const ACTIVITY_LEVELS = new Set(['idle', 'walking', 'running']);
+const MAX_MOVEMENT_SCORE = 20;
 
 const classifyActivityLevel = (movementScore) => {
-  if (movementScore < 5) return 'resting';
-  if (movementScore < 15) return 'walking';
+  if (movementScore < 1.5) return 'idle';
+  if (movementScore <= 4) return 'walking';
   return 'running';
 };
 
-const normalizePayload = (body = {}) => {
+const normalizePayload = (body = {}, authenticatedUserId = '') => {
+  const incomingUserId = String(body.userId || '').trim();
+  if (!incomingUserId) {
+    return { error: 'userId is required' };
+  }
+
+  if (incomingUserId !== String(authenticatedUserId || '').trim()) {
+    return { error: 'userId does not match authenticated user' };
+  }
+
   const parsedSteps = Number(body.steps);
   const parsedMovementScore = Number(body.movementScore);
 
@@ -20,8 +30,12 @@ const normalizePayload = (body = {}) => {
     return { error: 'steps must be a non-negative number' };
   }
 
-  if (!Number.isFinite(parsedMovementScore) || parsedMovementScore < 0) {
-    return { error: 'movementScore must be a non-negative number' };
+  if (
+    !Number.isFinite(parsedMovementScore) ||
+    parsedMovementScore < 0 ||
+    parsedMovementScore > MAX_MOVEMENT_SCORE
+  ) {
+    return { error: `movementScore must be between 0 and ${MAX_MOVEMENT_SCORE}` };
   }
 
   const normalizedActivityLevel = String(body.activityLevel || '').toLowerCase().trim();
@@ -35,8 +49,8 @@ const normalizePayload = (body = {}) => {
   }
 
   return {
-    // Store amplified step count so all clients/reports read consistent values.
-    steps: Math.round(parsedSteps * 2),
+    userId: incomingUserId,
+    steps: Math.round(parsedSteps),
     activityLevel,
     movementScore: Number(parsedMovementScore.toFixed(2)),
     recordedAt: timestamp,
@@ -45,17 +59,25 @@ const normalizePayload = (body = {}) => {
 
 const buildWearableResponse = (record) => ({
   steps: record?.steps ?? 0,
-  activityLevel: record?.activityLevel ?? 'resting',
+  activityLevel: record?.activityLevel ?? 'idle',
   movementScore: Number(record?.movementScore ?? 0),
   recordedAt: record?.recordedAt ?? null,
 });
 
-router.post('/update', protect, async (req, res) => {
+const validateWearablePayload = (req, res, next) => {
+  const normalized = normalizePayload(req.body, req.user?.id);
+  if (normalized.error) {
+    const isForbidden = normalized.error === 'userId does not match authenticated user';
+    return res.status(isForbidden ? 403 : 400).json({ error: normalized.error });
+  }
+
+  req.normalizedWearablePayload = normalized;
+  return next();
+};
+
+router.post('/update', protect, validateWearablePayload, async (req, res) => {
   try {
-    const normalized = normalizePayload(req.body);
-    if (normalized.error) {
-      return res.status(400).json({ error: normalized.error });
-    }
+    const normalized = req.normalizedWearablePayload;
 
 
     const userObjectId = new mongoose.Types.ObjectId(req.user.id);
