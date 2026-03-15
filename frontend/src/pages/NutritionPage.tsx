@@ -3,6 +3,8 @@ import PageTransition from "@/components/PageTransition";
 import { Apple, Plus, Camera, Upload, Sparkles, Loader2, UtensilsCrossed, Flame, Beef, Wheat, Droplet, Check } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { useState, useRef, useCallback, useEffect } from "react";
+import { api } from "@/lib/api";
+import { getOrCreateCurrentUserId } from "@/lib/userSession";
 
 const getApiBaseUrl = () => {
   const envBase = import.meta.env.VITE_API_BASE_URL;
@@ -42,9 +44,10 @@ interface AnalysisResult {
 }
 
 const NutritionPage = () => {
-  const [meals, setMeals] = useState(initialMeals);
-  const [macroTotals, setMacroTotals] = useState(initialMacros);
-  const [totalCal, setTotalCal] = useState(1800);
+  const [meals, setMeals] = useState<any[]>([]);
+  const [macroTotals, setMacroTotals] = useState({ protein: 0, carbs: 0, fat: 0, sugar: 0 });
+  const [totalCal, setTotalCal] = useState(0);
+  const [loading, setLoading] = useState(true);
 
   // AI Analyzer state
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -202,26 +205,96 @@ const NutritionPage = () => {
     }
   }, [selectedFile]);
 
-  const addToDaily = useCallback(() => {
-    if (!result) return;
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+  const fetchMeals = useCallback(async () => {
+    try {
+      setLoading(true);
+      const uid = await getOrCreateCurrentUserId();
+      const today = new Date().toISOString().slice(0, 10);
+      
+      const [mealsList, summary] = await Promise.all([
+        api.meals.getByUserAndDate(uid, today),
+        api.meals.getSummary(uid, today)
+      ]);
 
-    setMeals((prev) => [...prev, {
-      type: "AI Analyzed",
-      time: timeStr,
-      items: result.foodItems.join(", "),
-      cal: result.calories,
-    }]);
-    setTotalCal((prev) => prev + result.calories);
-    setMacroTotals((prev) => ({
-      protein: prev.protein + result.protein,
-      carbs: prev.carbs + result.carbs,
-      fat: prev.fat + result.fat,
-      sugar: prev.sugar,
-    }));
-    setAdded(true);
-  }, [result]);
+      if (Array.isArray(mealsList)) {
+        setMeals(mealsList.map(m => ({
+          type: m.mealType,
+          time: m.time,
+          items: m.items,
+          cal: m.calories
+        })));
+      }
+
+      if (summary) {
+        setTotalCal(summary.totalCalories || 0);
+        setMacroTotals({
+          protein: summary.totalProtein || 0,
+          carbs: summary.totalCarbs || 0,
+          fat: summary.totalFat || 0,
+          sugar: summary.totalSugar || 0
+        });
+      }
+    } catch (err) {
+      console.error("Error fetching meals:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const addToDaily = useCallback(async () => {
+    if (!result) return;
+    
+    try {
+      const uid = await getOrCreateCurrentUserId();
+      const now = new Date();
+      const currentHour = now.getHours();
+      
+      // Map to valid enum: Breakfast, Lunch, Dinner, Snacks
+      let mealType = "Snacks";
+      if (currentHour >= 5 && currentHour < 11) mealType = "Breakfast";
+      else if (currentHour >= 11 && currentHour < 16) mealType = "Lunch";
+      else if (currentHour >= 18 && currentHour < 23) mealType = "Dinner";
+
+      const timeStr = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
+      const dateStr = now.toISOString().slice(0, 10);
+
+      // 1. Save to backend database
+      await api.meals.create({
+        userId: uid,
+        mealType,
+        items: result.foodItems.join(", "),
+        calories: result.calories,
+        macros: {
+          protein: result.protein,
+          carbs: result.carbs,
+          fat: result.fat,
+          sugar: 0
+        },
+        date: dateStr,
+        time: timeStr
+      });
+
+      // 2. Add impact to circadian rhythm if it's high calorie
+      if (result.calories > 800) {
+        await api.circadianRhythm.create({
+          userId: uid,
+          date: dateStr,
+          metric: "digestion_load",
+          value: "high",
+          impact: -15, // Negative impact on circadian score
+          note: `Heavy ${mealType} detected (@ ${result.calories} kcal)`
+        });
+      }
+
+      // 4. Reload all data to ensure sync
+      await fetchMeals();
+      setAdded(true);
+
+    } catch (err: any) {
+      console.error("Error adding meal:", err);
+      setError("Failed to save meal record. Please check backend logs.");
+    }
+  }, [result, fetchMeals]);
 
   const clearAnalyzer = useCallback(() => {
     setSelectedImage(null);
@@ -233,10 +306,11 @@ const NutritionPage = () => {
   }, []);
 
   useEffect(() => {
+    fetchMeals();
     return () => {
       stopCamera();
     };
-  }, [stopCamera]);
+  }, [stopCamera, fetchMeals]);
 
   return (
     <PageTransition>
@@ -487,16 +561,26 @@ const NutritionPage = () => {
             <h3 className="font-display font-semibold text-base flex items-center gap-2">
               <Apple className="w-4 h-4 text-primary" /> Today's Meals
             </h3>
-            {meals.map((m, i) => (
-              <motion.div key={`${m.type}-${i}`} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }} className="glass-card-hover p-4">
-                <div className="flex items-center justify-between mb-1">
-                  <h4 className="font-semibold text-sm">{m.type}</h4>
-                  <span className="text-xs text-muted-foreground">{m.time}</span>
-                </div>
-                <p className="text-sm text-muted-foreground">{m.items}</p>
-                <p className="text-xs font-semibold text-primary mt-2">{m.cal} kcal</p>
-              </motion.div>
-            ))}
+            {loading ? (
+              <div className="flex items-center justify-center py-12 text-muted-foreground">
+                <Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading meals...
+              </div>
+            ) : meals.length === 0 ? (
+              <div className="p-8 text-center border-2 border-dashed border-border rounded-2xl text-muted-foreground text-sm">
+                No meals recorded for today yet.
+              </div>
+            ) : (
+              meals.map((m, i) => (
+                <motion.div key={`${m.type}-${i}`} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }} className="glass-card-hover p-4">
+                  <div className="flex items-center justify-between mb-1">
+                    <h4 className="font-semibold text-sm">{m.type}</h4>
+                    <span className="text-xs text-muted-foreground">{m.time}</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground">{m.items}</p>
+                  <p className="text-xs font-semibold text-primary mt-2">{m.cal} kcal</p>
+                </motion.div>
+              ))
+            )}
             <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }} className="w-full py-3 rounded-xl border-2 border-dashed border-border text-sm font-medium text-muted-foreground hover:border-primary hover:text-primary transition-colors flex items-center justify-center gap-2">
               <Plus className="w-4 h-4" /> Add Meal
             </motion.button>

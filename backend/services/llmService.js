@@ -199,7 +199,11 @@ Format as JSON array with objects: {insight: "...", time: "HH:MM", impact: "high
     } catch {
       const jsonMatch = responseText.match(/\[[\s\S]*\]/);
       if (jsonMatch) {
-        parsed = JSON.parse(jsonMatch[0]);
+        try {
+          parsed = JSON.parse(jsonMatch[0]);
+        } catch (e) {
+          // ignore
+        }
       }
     }
 
@@ -287,7 +291,11 @@ Rules:
     } catch {
       const match = text.match(/\[[\s\S]*\]/);
       if (match) {
-        parsed = JSON.parse(match[0]);
+        try {
+          parsed = JSON.parse(match[0]);
+        } catch (e) {
+          // ignore
+        }
       }
     }
 
@@ -379,9 +387,22 @@ Format as JSON: {times: [HH:MM, ...], reasons:["reason for time 1", "reason for 
     const responseText = completion.choices?.[0]?.message?.content || "";
 
     // Parse JSON from response
-    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
+    let parsed = null;
+    try {
+      parsed = JSON.parse(responseText);
+    } catch {
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          parsed = JSON.parse(jsonMatch[0]);
+        } catch (e) {
+          // ignore
+        }
+      }
+    }
+    
+    if (parsed) {
+      return parsed;
     }
 
     // Fallback response
@@ -466,10 +487,22 @@ Format as JSON: {schedule: [{drug: "name", time: "HH:MM", window: "...", reason:
 
     const responseText = completion.choices?.[0]?.message?.content || "";
 
-    // Parse JSON from response
-    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
+    let parsed = null;
+    try {
+      parsed = JSON.parse(responseText);
+    } catch {
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          parsed = JSON.parse(jsonMatch[0]);
+        } catch (e) {
+          // ignore
+        }
+      }
+    }
+    
+    if (parsed) {
+      return parsed;
     }
 
     // Fallback: generate basic schedule
@@ -544,10 +577,22 @@ Format as: {title: "Why ${recommendedTime}?", explanation: "...", benefit: "...%
 
     const responseText = completion.choices?.[0]?.message?.content || "";
 
-    // Parse JSON from response
-    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
+    let parsed = null;
+    try {
+      parsed = JSON.parse(responseText);
+    } catch {
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          parsed = JSON.parse(jsonMatch[0]);
+        } catch (e) {
+          // ignore
+        }
+      }
+    }
+
+    if (parsed) {
+      return parsed;
     }
 
     return {

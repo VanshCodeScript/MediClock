@@ -7,23 +7,15 @@ import {
   Brain,
   Bell,
   CheckCircle2,
-  HeartPulse,
-  Footprints,
-  Moon,
-  Activity,
   Loader2,
   Sunrise,
   Sunset,
 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip, BarChart, Bar } from "recharts";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { api } from "@/lib/api";
 import { getOrCreateCurrentUserId } from "@/lib/userSession";
-import { wearableSensorsService } from "@/services/wearableSensors";
-
-const WEARABLE_POLL_INTERVAL_MS = 30 * 1000;
-const DASHBOARD_POLL_INTERVAL_MS = 60 * 1000;
 
 type TimelineReminder = {
   medicationName: string;
@@ -49,13 +41,6 @@ type DashboardData = {
   healthLatest: any;
   caloriesToday: number | null;
   profile: CircadianProfile;
-};
-
-type WearableMetrics = {
-  steps: number;
-  activityLevel: string;
-  movementScore: number;
-  recordedAt: string | null;
 };
 
 type HoverInfo = {
@@ -126,8 +111,6 @@ const riskFromThreshold = (value: number, low: number, high: number): "green" | 
   return "green";
 };
 
-const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
-
 const minutesUntil = (nowMinutes: number, targetMinutes: number) =>
   (targetMinutes - nowMinutes + 1440) % 1440;
 
@@ -137,14 +120,17 @@ const fadeUp = { hidden: { opacity: 0, y: 15 }, show: { opacity: 1, y: 0 } };
 const CircadianWheel = ({
   profile,
   reminders,
+  caloriesToday,
 }: {
   profile: CircadianProfile;
   reminders: TimelineReminder[];
+  caloriesToday?: number | null;
 }) => {
-  const size = 620;
-  const viewPadding = 110;
+  const size = 380;
+  const viewPadding = 80;
   const center = size / 2;
-  const radius = 166;
+  const radius = 100;
+  const isJunkMode = (caloriesToday || 0) > 2200;
 
   const now = new Date();
   const currentHour = now.getHours() + now.getMinutes() / 60;
@@ -157,17 +143,17 @@ const CircadianWheel = ({
   };
 
   const eventNodes = [
-    { time: "21:00", label: "Melatonin starts", icon: "🌙", category: "biological" as const, detail: "Body prepares for sleep onset." },
+    { time: "21:00", label: "Melatonin secretion starts", icon: "🌙", category: "biological" as const, detail: "Body prepares for sleep onset." },
     { time: "02:00", label: "Deepest sleep", icon: "🛌", category: "biological" as const, detail: "Peak restorative slow-wave sleep window." },
-    { time: "04:30", label: "Lowest temp", icon: "🌡️", category: "biological" as const, detail: "Core body temperature reaches daily minimum." },
-    { time: "06:45", label: "BP surge", icon: "❤️", category: "biological" as const, detail: "Morning cardiovascular activation period." },
-    { time: "07:30", label: "Melatonin stops", icon: "🧠", category: "biological" as const, detail: "Wake signaling becomes dominant." },
+    { time: "04:30", label: "Lowest body temperature", icon: "🌡️", category: "biological" as const, detail: "Core body temperature reaches daily minimum." },
+    { time: "06:45", label: "Sharpest BP rise", icon: "❤️", category: "biological" as const, detail: "Morning cardiovascular activation period." },
+    { time: "07:30", label: "Melatonin secretion stops", icon: "🧠", category: "biological" as const, detail: "Wake signaling becomes dominant." },
     { time: "10:00", label: "Highest alertness", icon: "💡", category: "biological" as const, detail: "Cognitive alertness is typically strongest." },
     { time: "14:30", label: "Best coordination", icon: "🎯", category: "biological" as const, detail: "Neuromotor coordination often improves." },
-    { time: "15:30", label: "Fastest reaction", icon: "⏱️", category: "biological" as const, detail: "Reaction speed usually peaks." },
-    { time: "17:00", label: "Best performance", icon: "💪", category: "biological" as const, detail: "Muscular performance trend high." },
-    { time: "18:30", label: "Highest BP", icon: "🫀", category: "biological" as const, detail: "Blood pressure tends to be elevated." },
-    { time: "19:00", label: "Highest temp", icon: "🌡️", category: "biological" as const, detail: "Core body temperature reaches daily maximum." },
+    { time: "15:30", label: "Fastest reaction time", icon: "⏱️", category: "biological" as const, detail: "Reaction speed usually peaks." },
+    { time: "17:00", label: "Best muscle performance", icon: "💪", category: "biological" as const, detail: "Muscular performance trends high." },
+    { time: "18:30", label: "Highest blood pressure", icon: "🫀", category: "biological" as const, detail: "Blood pressure tends to be elevated." },
+    { time: "19:00", label: "Highest body temperature", icon: "🌡️", category: "biological" as const, detail: "Core body temperature reaches daily maximum." },
   ];
 
   const profileNodes = [
@@ -263,9 +249,9 @@ const CircadianWheel = ({
     return placed;
   };
 
-  const eventPlaced = placeNodes(visibleEventNodes, radius + 95, 14, 14, 11);
-  const profilePlaced = placeNodes(profileNodes, radius + 64, 30, 24, 16);
-  const medicationPlaced = placeNodes(medicationNodes, radius + 28, 20, 14, 10);
+  const eventPlaced = placeNodes(visibleEventNodes, radius + 55, 14, 16, 12);
+  const profilePlaced = placeNodes(profileNodes, radius + 38, 30, 24, 16);
+  const medicationPlaced = placeNodes(medicationNodes, radius + 20, 20, 16, 12);
 
   const node = (
     n: PlacedNode,
@@ -287,16 +273,16 @@ const CircadianWheel = ({
     const hideLabel = Boolean(options?.hideLabel);
     const ux = (p.x - center) / Math.max(1, n.iconRadius);
     const uy = (p.y - center) / Math.max(1, n.iconRadius);
-    const textOffset = compact ? 28 : 34;
+    const textOffset = compact ? 22 : 26;
     const textX = p.x + ux * textOffset;
     const textY = p.y + uy * textOffset;
     const anchor: "start" | "end" | "middle" = Math.abs(ux) < 0.3 ? "middle" : ux > 0 ? "start" : "end";
-    const lineGap = compact ? 12 : 14;
+    const lineGap = compact ? 10 : 12;
     const topZone = uy < -0.35;
     const timeY = topZone ? textY - lineGap : textY;
     const labelY = topZone ? textY : textY + lineGap;
-    const timeFont = compact ? "text-[13px]" : "text-[14px]";
-    const labelFont = compact ? "text-[13px]" : "text-[14px]";
+    const timeFont = compact ? "text-[11px]" : "text-[12px]";
+    const labelFont = compact ? "text-[11px]" : "text-[12px]";
 
     return (
       <g
@@ -312,10 +298,11 @@ const CircadianWheel = ({
         }
         onMouseLeave={() => setHovered(null)}
       >
+        <circle cx={polar(radius + 10, n.angle).x} cy={polar(radius + 10, n.angle).y} r="3" fill="#0f4c81" />
         <title>{`${n.label} (${n.time}) - ${n.detail}`}</title>
-        <foreignObject x={p.x - 20} y={p.y - 20} width="40" height="40">
-          <div className={`w-10 h-10 rounded-full border flex items-center justify-center bg-white ${colorClass}`}>
-            {typeof n.icon === "string" ? <span className="text-base">{n.icon}</span> : n.icon}
+        <foreignObject x={p.x - 16} y={p.y - 16} width="32" height="32">
+          <div className={`w-8 h-8 rounded-full border flex items-center justify-center bg-white/90 shadow-sm ${colorClass}`}>
+            {typeof n.icon === "string" ? <span className="text-sm">{n.icon}</span> : n.icon}
           </div>
         </foreignObject>
         {!hideTime && (
@@ -350,7 +337,7 @@ const CircadianWheel = ({
 
   return (
     <motion.div
-      className="flex flex-col xl:flex-row items-stretch xl:items-center justify-center gap-4 overflow-x-auto py-4"
+      className="relative flex items-center justify-center py-0 -my-8 overflow-hidden z-0"
       initial={{ opacity: 0, scale: 0.96, y: 6 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
       transition={{ duration: 0.5, ease: "easeOut" }}
@@ -358,44 +345,26 @@ const CircadianWheel = ({
       <motion.svg
         width={size}
         height={size}
-        viewBox={`${-viewPadding} ${-viewPadding} ${size + viewPadding * 2} ${size + viewPadding * 2}`}
-        className="w-full max-w-[980px] h-auto overflow-visible"
+        viewBox={`${-viewPadding + 20} ${-viewPadding + 20} ${size + (viewPadding - 20) * 2} ${size + (viewPadding - 20) * 2}`}
+        className="w-full max-w-[800px] h-auto overflow-visible relative z-0"
         animate={{ scale: [1, 1.01, 1] }}
         transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
       >
-        <circle cx={center} cy={center} r={radius + 92} fill="none" stroke="hsl(var(--border))" strokeWidth="1" />
-        <circle cx={center} cy={center} r={radius + 28} fill="none" stroke="rgba(14,116,144,0.20)" strokeWidth="34" strokeLinecap="round" />
-        <circle cx={center} cy={center} r={radius + 10} fill="none" stroke="rgba(56,189,248,0.10)" strokeWidth="10" />
-        <circle
-          cx={center}
-          cy={center}
-          r={radius + 44}
-          fill="none"
-          stroke="rgba(14,116,144,0.18)"
-          strokeWidth="1.4"
-          strokeDasharray="4 10"
-        >
-          <animateTransform
-            attributeName="transform"
-            attributeType="XML"
-            type="rotate"
-            from={`0 ${center} ${center}`}
-            to={`360 ${center} ${center}`}
-            dur="42s"
-            repeatCount="indefinite"
-          />
-        </circle>
+        <circle cx={center} cy={center} r={radius + 80} fill={isJunkMode ? "#fff1f2" : "#d9eff9"} />
+        <circle cx={center} cy={center} r={radius + 60} fill={isJunkMode ? "#ffe4e6" : "#cbe7f4"} />
+        <circle cx={center} cy={center} r={radius + 20} fill="none" stroke={isJunkMode ? "#be123c" : "#0f4c81"} strokeWidth="4" />
+        <circle cx={center} cy={center} r={radius + 20} fill="none" stroke={isJunkMode ? "#f43f5e" : "#74b3ce"} strokeWidth="10" opacity="0.55" />
 
         {Array.from({ length: 24 }, (_, i) => {
           const angle = (i / 24) * 360 - 90;
-          const a = polar(radius + 8, angle);
-          const b = polar(radius + (i % 6 === 0 ? 18 : 12), angle);
-          return <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="hsl(var(--muted-foreground))" opacity={i % 6 === 0 ? 0.6 : 0.25} />;
+          const a = polar(radius + 4, angle);
+          const b = polar(radius + (i % 6 === 0 ? 12 : 8), angle);
+          return <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={isJunkMode ? "#e11d48" : "hsl(var(--muted-foreground))"} opacity={i % 6 === 0 ? 0.6 : 0.25} />;
         })}
 
         {[0, 6, 12, 18].map((h) => {
           const angle = (h / 24) * 360 - 90;
-          const p = polar(radius + 42, angle);
+          const p = polar(radius + 38, angle);
           const label = h === 0 ? "MIDNIGHT" : h === 12 ? "NOON" : `${h}:00`;
           return (
             <text
@@ -403,7 +372,7 @@ const CircadianWheel = ({
               x={p.x}
               y={p.y}
               textAnchor="middle"
-              className="text-[18px] font-semibold fill-slate-600"
+              className={`text-[14px] font-semibold ${isJunkMode ? 'fill-rose-700' : 'fill-slate-700'}`}
               stroke="rgba(255,255,255,0.92)"
               strokeWidth="3"
               paintOrder="stroke"
@@ -413,36 +382,48 @@ const CircadianWheel = ({
           );
         })}
 
-        <circle cx={center} cy={center} r="112" fill="rgba(14,116,144,0.05)" stroke="rgba(14,116,144,0.2)" />
-        <text x={center} y={center - 12} textAnchor="middle" className="text-[42px] font-bold fill-sky-900">CIRCADIAN</text>
-        <text x={center} y={center + 34} textAnchor="middle" className="text-[42px] font-bold fill-sky-900">RHYTHM</text>
+        <circle cx={center} cy={center} r="74" fill={isJunkMode ? "#9f1239" : "#0f4c81"} />
+        
+        {/* We hide the default CIRCADIAN RHYTHM text if something is hovered, since the box will overlay it, but keeping it visible underneath when nothing is hovered creates a nice effect */}
+        <g style={{ opacity: hovered ? 0 : 1, transition: "opacity 0.2s ease" }}>
+          {isJunkMode ? (
+            <>
+              <text x={center} y={center - 12} textAnchor="middle" className="text-[18px] font-bold fill-white">METABOLIC</text>
+              <text x={center} y={center + 6} textAnchor="middle" className="text-[18px] font-bold fill-white">STRESS</text>
+              <text x={center} y={center + 24} textAnchor="middle" className="text-[10px] font-bold fill-rose-200">HEAVY LOAD DETECTED</text>
+              <text x={center} y={center + 54} textAnchor="middle" className="text-[20px]">⚠️</text>
+            </>
+          ) : (
+            <>
+              <text x={center} y={center - 8} textAnchor="middle" className="text-[22px] font-bold fill-white">CIRCADIAN</text>
+              <text x={center} y={center + 18} textAnchor="middle" className="text-[22px] font-bold fill-white">RHYTHM</text>
+              <text x={center} y={center + 54} textAnchor="middle" className="text-[20px]">☀️</text>
+            </>
+          )}
+        </g>
 
-        <line x1={center} y1={center} x2={polar(radius - 10, currentAngle).x} y2={polar(radius - 10, currentAngle).y} stroke="#0369a1" strokeWidth="2.8">
+        <line x1={center} y1={center} x2={polar(radius - 4, currentAngle).x} y2={polar(radius - 4, currentAngle).y} stroke={isJunkMode ? "#fb7185" : "#0f4c81"} strokeWidth={isJunkMode ? "3" : "2"}>
           <animate attributeName="opacity" values="0.9;1;0.9" dur="2.4s" repeatCount="indefinite" />
         </line>
-        <circle cx={polar(radius - 10, currentAngle).x} cy={polar(radius - 10, currentAngle).y} r="5" fill="#0369a1">
-          <animate attributeName="r" values="4.2;5.6;4.2" dur="2.4s" repeatCount="indefinite" />
+        <circle cx={polar(radius - 4, currentAngle).x} cy={polar(radius - 4, currentAngle).y} r={isJunkMode ? "5" : "4"} fill={isJunkMode ? "#e11d48" : "#0f4c81"}>
+          <animate attributeName="r" values={isJunkMode ? "4.5;5.5;4.5" : "3.5;4.5;3.5"} dur="2.4s" repeatCount="indefinite" />
         </circle>
 
-        {eventPlaced.map((e) => node(e, "border-sky-100", "fill-slate-600"))}
+        {eventPlaced.map((e) => node(e, "border-sky-200", "fill-slate-700"))}
         {profilePlaced.map((e) => node(e, "border-emerald-200 bg-emerald-50", "fill-emerald-700", { compact: false }))}
         {medicationPlaced.map((e) => node(e, "border-indigo-200 bg-indigo-50", "fill-indigo-700", { compact: true, hideTime: true, hideLabel: true }))}
       </motion.svg>
 
-      <div className="w-full xl:w-[320px] xl:min-w-[320px] xl:self-center">
-        <div className="rounded-xl border bg-white/70 backdrop-blur-sm px-4 py-3 text-sm h-full">
-          {hovered ? (
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <span className="font-semibold text-slate-800">{hovered.title}</span>
-              <span className="text-slate-600">{hovered.time}</span>
-              <span className="uppercase tracking-wide text-[11px] font-semibold text-slate-500">{hovered.category}</span>
-              <span className="text-slate-700">{hovered.detail}</span>
-            </div>
-          ) : (
-            <span className="text-slate-600">Hover over any clock marker to view details here.</span>
-          )}
+      {hovered && (
+        <div className="absolute inset-0 m-auto flex items-center justify-center pointer-events-none z-10 w-full h-full">
+          <div className="rounded-full bg-sky-50 shadow-xl border border-sky-300 w-[140px] h-[140px] flex flex-col items-center justify-center text-center p-3 transform scale-100 animate-in fade-in zoom-in-95 duration-200">
+            <span className="font-semibold text-sky-700 bg-sky-100/80 px-1.5 py-0.5 rounded-md text-[9px] mb-1">{hovered.time}</span>
+            <span className="font-bold text-sky-950 text-xs leading-tight mb-1 max-w-[124px] truncate">{hovered.title}</span>
+            <span className="text-sky-800 text-[9px] font-medium leading-tight mb-1 line-clamp-2 max-w-[120px]">{hovered.detail}</span>
+            <span className="uppercase tracking-wider text-[7px] font-bold text-sky-600/60 mt-auto">{hovered.category}</span>
+          </div>
         </div>
-      </div>
+      )}
     </motion.div>
   );
 };
@@ -450,13 +431,6 @@ const CircadianWheel = ({
 const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [wearablesLoading, setWearablesLoading] = useState(false);
-  const [wearablesError, setWearablesError] = useState<string | null>(null);
-  const [sensorNotice, setSensorNotice] = useState<string | null>(null);
-  const [needsSensorPermission, setNeedsSensorPermission] = useState(false);
-  const [sensorStarted, setSensorStarted] = useState(false);
-  const [liveHeartRate, setLiveHeartRate] = useState(72);
-  const [wearables, setWearables] = useState<WearableMetrics | null>(null);
   const [data, setData] = useState<DashboardData>({
     timeline: [],
     healthLatest: null,
@@ -491,35 +465,12 @@ const Dashboard = () => {
     });
   };
 
-  const syncWearables = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
-    try {
-      if (!silent) {
-        setWearablesLoading(true);
-      }
-
-      const payload = await api.wearables.getLatest();
-      setWearables({
-        steps: Number(payload?.steps ?? 0),
-        activityLevel: String(payload?.activityLevel || "resting"),
-        movementScore: Number(payload?.movementScore ?? 0),
-        recordedAt: payload?.recordedAt || null,
-      });
-      setWearablesError(null);
-    } catch (e: any) {
-      setWearablesError(e?.message || "Unable to refresh wearable metrics");
-    } finally {
-      if (!silent) {
-        setWearablesLoading(false);
-      }
-    }
-  }, []);
-
   useEffect(() => {
     const init = async () => {
       try {
         setLoading(true);
         setError(null);
-        await Promise.all([fetchDashboard(), syncWearables()]);
+        await fetchDashboard();
       } catch (e: any) {
         setError(e?.message || "Failed to load dashboard");
       } finally {
@@ -528,105 +479,7 @@ const Dashboard = () => {
     };
 
     init();
-  }, [syncWearables]);
-
-  useEffect(() => {
-    const intervalId = window.setInterval(() => {
-      void syncWearables({ silent: true });
-    }, WEARABLE_POLL_INTERVAL_MS);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, [syncWearables]);
-
-  useEffect(() => {
-    const intervalId = window.setInterval(() => {
-      void fetchDashboard().catch(() => {
-        // Keep current UI state when background refresh fails.
-      });
-    }, DASHBOARD_POLL_INTERVAL_MS);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
   }, []);
-
-  useEffect(() => {
-    const sourceHeartRate = Number(data.healthLatest?.heartRate ?? 72);
-    const sanitized = clamp(Number.isFinite(sourceHeartRate) ? sourceHeartRate : 72, 60, 100);
-    setLiveHeartRate(Math.round(sanitized));
-  }, [data.healthLatest?.heartRate]);
-
-  useEffect(() => {
-    const intervalId = window.setInterval(() => {
-      setLiveHeartRate((prev) => {
-        const backendHeartRate = Number(data.healthLatest?.heartRate ?? 72);
-        const movementScore = Number(wearables?.movementScore ?? 0);
-        const activity = String(wearables?.activityLevel || "resting").toLowerCase();
-
-        const activityBase =
-          activity === "running" ? 92 : activity === "walking" ? 80 : 72;
-        const movementAdjustment = clamp(movementScore * 0.8, 0, 12);
-        const backendAnchor = Number.isFinite(backendHeartRate)
-          ? clamp(backendHeartRate, 60, 100)
-          : activityBase + movementAdjustment;
-
-        const target = clamp((activityBase + movementAdjustment + backendAnchor) / 2, 60, 100);
-        const next = prev + (target - prev) * 0.35 + (Math.random() - 0.5) * 2;
-        return Math.round(clamp(next, 60, 100));
-      });
-    }, 2500);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, [data.healthLatest?.heartRate, wearables?.activityLevel, wearables?.movementScore]);
-
-  useEffect(() => {
-    let active = true;
-
-    wearableSensorsService.setCallbacks({
-      onUpdate: (snapshot) => {
-        if (!active) return;
-        setWearables((prev) => ({
-          ...(prev || {}),
-          steps: snapshot.steps * 2,
-          activityLevel: snapshot.activityLevel,
-          movementScore: snapshot.movementScore,
-          recordedAt: snapshot.timestamp,
-        }));
-      },
-      onError: (message) => {
-        if (!active) return;
-        setWearablesError(message);
-      },
-    });
-
-    const initSensors = async () => {
-      const result = await wearableSensorsService.start();
-      if (!active) return;
-
-      setNeedsSensorPermission(Boolean(result.requiresPermission));
-      setSensorStarted(Boolean(result.started));
-      setSensorNotice(result.started ? null : result.message || null);
-    };
-
-    void initSensors();
-
-    return () => {
-      active = false;
-      wearableSensorsService.stop();
-      wearableSensorsService.setCallbacks({});
-    };
-  }, []);
-
-  const enableMotionSensors = async () => {
-    const result = await wearableSensorsService.requestPermissionAndStart();
-    setNeedsSensorPermission(Boolean(result.requiresPermission));
-    setSensorStarted(Boolean(result.started));
-    setSensorNotice(result.started ? null : result.message || null);
-  };
 
   const hormoneData = generateHormoneSeries(data.profile);
   const now = new Date();
@@ -747,21 +600,6 @@ const Dashboard = () => {
         : `Plan light movement and hydration near ${format12h(nextAnchor.time)}.`
     : "Keep a consistent wake, meal, and sleep routine today.";
 
-  const heartRateValue = liveHeartRate;
-  const stepsValue = wearables?.steps ?? 0;
-  const movementScoreValue = wearables?.movementScore ?? 0;
-  const activityLevelValue = wearables?.activityLevel || "resting";
-
-  const heartRateStatus = riskFromThreshold(heartRateValue, 55, 100);
-  const stepsStatus = stepsValue >= 8000 ? "green" : stepsValue >= 4000 ? "yellow" : "red";
-  const movementStatus = movementScoreValue >= 15 ? "green" : movementScoreValue >= 5 ? "yellow" : "red";
-  const activityStatus =
-    activityLevelValue.toLowerCase() === "running"
-      ? "green"
-      : activityLevelValue.toLowerCase() === "walking"
-        ? "yellow"
-        : "red";
-
   return (
     <PageTransition>
       <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
@@ -773,12 +611,12 @@ const Dashboard = () => {
         )}
 
       {/* Circadian Rhythm Wheel Visualization */}
-      <motion.div variants={fadeUp} className="glass-card p-6">
-        <h3 className="font-display font-semibold text-lg mb-4 flex items-center gap-2">
+      <motion.div variants={fadeUp} className="glass-card px-6 pb-4 pt-4">
+        <h3 className="font-display font-semibold text-lg mb-0 flex items-center gap-2 z-10 relative">
           <Clock className="w-4 h-4 text-primary" /> Circadian Rhythm Wheel
         </h3>
-        <CircadianWheel profile={data.profile} reminders={data.timeline} />
-        <div className="flex flex-wrap items-center justify-center gap-5 mt-4 text-sm text-muted-foreground">
+        <CircadianWheel profile={data.profile} reminders={data.timeline} caloriesToday={data.caloriesToday} />
+        <div className="flex flex-wrap items-center justify-center gap-5 mt-0 text-sm text-muted-foreground relative z-10">
           <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-full bg-sky-100 border border-sky-200 inline-block" /> Biological events</span>
           <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-full bg-emerald-50 border border-emerald-200 inline-block" /> Profile timings</span>
           <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-full bg-indigo-50 border border-indigo-200 inline-block" /> Medication doses</span>
@@ -823,58 +661,6 @@ const Dashboard = () => {
         <p className="text-sm text-muted-foreground mb-1">Recommended Next Action</p>
         <p className="text-base font-medium">{nextAction}</p>
       </motion.div>
-
-      <motion.div variants={fadeUp} className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-        <StatCard
-          title="Heart Rate"
-          value={Number.isFinite(heartRateValue) ? String(Math.round(heartRateValue)) : "--"}
-          unit="bpm"
-          icon={<HeartPulse className="w-5 h-5" />}
-          trend={wearablesLoading ? "Syncing..." : "Auto-refresh every 2-3 sec"}
-          status={heartRateStatus}
-        />
-        <StatCard
-          title="Steps"
-          value={wearables ? String(Math.round(stepsValue)) : "--"}
-          icon={<Footprints className="w-5 h-5" />}
-          trend={wearablesLoading ? "Syncing..." : "Today's movement"}
-          status={stepsStatus}
-        />
-        <StatCard
-          title="Movement Score"
-          value={wearables ? movementScoreValue.toFixed(1) : "--"}
-          icon={<Moon className="w-5 h-5" />}
-          trend={wearablesLoading ? "Syncing..." : "Device motion intensity"}
-          status={movementStatus}
-        />
-        <StatCard
-          title="Activity Level"
-          value={wearables ? activityLevelValue.charAt(0).toUpperCase() + activityLevelValue.slice(1) : "--"}
-          icon={<Activity className="w-5 h-5" />}
-          trend={wearablesLoading ? "Syncing..." : "resting/walking/running"}
-          status={activityStatus}
-        />
-      </motion.div>
-
-      {(sensorNotice || !sensorStarted) && (
-        <motion.div variants={fadeUp} className="glass-card p-4 border-l-4 border-blue-400 text-sm text-blue-800 bg-blue-50/40">
-          {sensorNotice || "Enable motion sensors to start live step/activity capture from your phone."}
-          {(needsSensorPermission || !sensorStarted) && (
-            <button
-              onClick={enableMotionSensors}
-              className="ml-3 inline-flex items-center rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50 transition-colors"
-            >
-              Enable Motion Sensors
-            </button>
-          )}
-        </motion.div>
-      )}
-
-      {wearablesError && (
-        <motion.div variants={fadeUp} className="glass-card p-4 border-l-4 border-yellow-400 text-sm text-yellow-800 bg-yellow-50/40">
-          Wearable sync issue: {wearablesError}
-        </motion.div>
-      )}
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
         {/* Medicine Schedule */}

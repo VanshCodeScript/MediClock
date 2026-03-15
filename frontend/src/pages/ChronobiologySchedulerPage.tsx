@@ -132,9 +132,9 @@ const ChronobiologyMedicationScheduler = () => {
 
         const styleByWindow = {
           morning: { icon: "🌅", color: "bg-blue-100 border-blue-300" },
-          afternoon: { icon: "☀️", color: "bg-orange-100 border-orange-300" },
-          evening: { icon: "🌇", color: "bg-purple-100 border-purple-300" },
-          night: { icon: "🌙", color: "bg-indigo-100 border-indigo-300" },
+          afternoon: { icon: "☀️", color: "bg-yellow-100 border-yellow-300" },
+          evening: { icon: "🌇", color: "bg-orange-100 border-orange-300" },
+          night: { icon: "🌙", color: "bg-sky-100 border-sky-300" },
         };
 
         const formattedSchedule = recommended.map((dose) => {
@@ -247,8 +247,8 @@ const ChronobiologyMedicationScheduler = () => {
             {/* Header */}
             <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="space-y-2">
               <div className="flex items-center gap-3">
-                <div className="p-3 rounded-xl bg-gradient-to-br from-purple-100 to-blue-100">
-                  <Brain className="w-6 h-6 text-purple-600" />
+                <div className="p-3 rounded-xl bg-gradient-to-br from-blue-100 to-sky-100">
+                  <Brain className="w-6 h-6 text-blue-600" />
                 </div>
                 <div>
                   <h1 className="font-display font-bold text-3xl">Chronobiology-Aware Scheduler</h1>
@@ -277,10 +277,10 @@ const ChronobiologyMedicationScheduler = () => {
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="glass-card p-6 border-l-4 border-purple-400"
+          className="glass-card p-6 border-l-4 border-blue-400"
         >
           <h3 className="font-display font-semibold text-base mb-4 flex items-center gap-2">
-            <Clock className="w-5 h-5 text-purple-500" />
+            <Clock className="w-5 h-5 text-blue-500" />
             Your 24-Hour Circadian Profile
           </h3>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -313,12 +313,12 @@ const ChronobiologyMedicationScheduler = () => {
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
-              className="glass-card p-5 border-l-4 border-violet-400"
+              className="glass-card p-5 border-l-4 border-sky-400"
             >
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-3">
                 <div>
                   <h3 className="font-display font-semibold text-base flex items-center gap-2">
-                    <Brain className="w-5 h-5 text-violet-600" />
+                    <Brain className="w-5 h-5 text-sky-600" />
                     AI Circadian Insights
                   </h3>
                   <p className="text-xs text-muted-foreground mt-1">
@@ -330,7 +330,7 @@ const ChronobiologyMedicationScheduler = () => {
                   whileTap={{ scale: 0.98 }}
                   onClick={handleGenerateInsights}
                   disabled={insightsLoading}
-                  className="px-4 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-violet-600 to-blue-600 text-white disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="px-4 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-blue-600 to-sky-600 text-white disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {insightsLoading ? "Generating..." : insights.length > 0 ? "Regenerate Insights" : "Generate AI Insights"}
                 </motion.button>
@@ -343,7 +343,7 @@ const ChronobiologyMedicationScheduler = () => {
               )}
 
               {!insightsLoading && insights.length === 0 && (
-                <div className="p-4 rounded-lg bg-violet-50/70 border border-violet-200 text-sm text-violet-900">
+                <div className="p-4 rounded-lg bg-sky-50/70 border border-sky-200 text-sm text-sky-900">
                   Click "Generate AI Insights" to analyze cortisol, melatonin, glucose windows for your current circadian profile.
                 </div>
               )}
@@ -406,52 +406,71 @@ const ChronobiologyMedicationScheduler = () => {
         >
           <h3 className="font-display font-semibold text-base mb-4">24-Hour Timeline with Medications</h3>
 
-          <div className="relative w-full h-32 bg-gradient-to-r from-indigo-900 via-yellow-50 via-blue-50 to-indigo-900 rounded-xl overflow-hidden border border-border">
-            {/* Hour markers */}
-            <div className="absolute inset-0 flex">
-              {timeline.map((t, idx) => (
-                <div key={idx} className="flex-1 border-r border-white/20 text-xs flex items-end justify-center pb-1">
-                  {idx % 2 === 0 && <span className={`${t.accentColor} font-medium text-xs`}>{t.hour}:00</span>}
+          <div className="overflow-x-auto pb-4 -mx-2 px-2 custom-scrollbar">
+            <div className="relative min-w-[900px] w-full h-56 bg-gradient-to-r from-blue-950 via-sky-100 via-amber-200 to-blue-950 rounded-2xl overflow-hidden shadow-inner border border-blue-900/30">
+              
+              {/* Full-Height Hourly Grid */}
+              <div className="absolute inset-x-0 inset-y-0 flex pointer-events-none z-0">
+                {timeline.map((t, idx) => (
+                  <div key={idx} className="flex-1 border-r border-black/5 dark:border-white/5 relative">
+                    {/* Hour label along the bottom */}
+                    {idx % 2 === 0 && (
+                      <div className="absolute bottom-1 left-1/2 -translate-x-1/2">
+                        <span className={`font-semibold text-[10px] sm:text-xs ${idx < 6 || idx >= 20 ? 'text-blue-100/90' : 'text-blue-900/70'}`}>
+                          {t.hour}:00
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Meal times */}
+              {[
+                { time: circadianProfile?.breakfastTime || "10:30", label: "🥣", name: "Breakfast" },
+                { time: circadianProfile?.lunchTime || "15:00", label: "🍽️", name: "Lunch" },
+                { time: circadianProfile?.dinnerTime || "21:00", label: "🥗", name: "Dinner" },
+              ].map((meal, idx) => (
+                <div
+                  key={idx}
+                  className="absolute bottom-8 transform -translate-x-1/2 flex flex-col items-center gap-1 z-10"
+                  style={{ left: `${timeToPercent(meal.time)}%` }}
+                >
+                  <div className="text-4xl drop-shadow-md hover:scale-110 transition-transform cursor-default" title={`${meal.name} @ ${meal.time}`}>{meal.label}</div>
+                  <span className="text-[10px] font-bold text-amber-900 bg-white/70 px-1.5 py-0.5 rounded backdrop-blur-sm hidden sm:block shadow-sm">
+                    {meal.time}
+                  </span>
                 </div>
               ))}
-            </div>
 
-            {/* Meal times */}
-            {[
-              { time: circadianProfile?.breakfastTime || "10:30", label: "🥣", color: "left-1/3" },
-              { time: circadianProfile?.lunchTime || "15:00", label: "🍽️", color: "left-1/2" },
-              { time: circadianProfile?.dinnerTime || "21:00", label: "🍽️", color: "left-5/6" },
-            ].map((meal, idx) => (
-              <div
-                key={idx}
-                className="absolute bottom-2 transform -translate-x-1/2"
-                style={{ left: `${timeToPercent(meal.time)}%` }}
-              >
-                <div className="text-2xl drop-shadow-sm">{meal.label}</div>
-              </div>
-            ))}
-
-            {/* Medication recommendations */}
-            {schedule.map((med, idx) => (
-              <motion.div
-                key={idx}
-                initial={{ opacity: 0, scale: 0.5 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.3 + idx * 0.1 }}
-                className="absolute top-2 transform -translate-x-1/2 cursor-pointer group"
-                style={{ left: `${timeToPercent(med.recommendedTime)}%` }}
-                onClick={() => setActiveScheduleItem(idx)}
-              >
-                <div
-                  className={`w-10 h-10 rounded-full ${med.color} border-2 flex items-center justify-center font-bold text-sm shadow-lg group-hover:scale-110 transition-transform`}
+              {/* Medication recommendations */}
+              {schedule.map((med, idx) => (
+                <motion.div
+                  key={idx}
+                  initial={{ opacity: 0, scale: 0.5, y: -20 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  transition={{ delay: 0.3 + idx * 0.1, type: "spring" }}
+                  className="absolute top-6 transform -translate-x-1/2 cursor-pointer group z-20 flex flex-col items-center"
+                  style={{ left: `${timeToPercent(med.recommendedTime)}%` }}
+                  onClick={() => setActiveScheduleItem(idx)}
                 >
-                  <Pill className="w-5 h-5" />
-                </div>
-                <div className="absolute top-full mt-1 bg-black text-white text-xs px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                  {med.recommendedTime}
-                </div>
-              </motion.div>
-            ))}
+                  <div className="relative flex flex-col items-center">
+                    <div
+                      className={`w-12 h-12 rounded-2xl ${med.color} border-2 flex items-center justify-center font-bold text-xl shadow-[0_4px_12px_rgba(30,58,138,0.2)] group-hover:scale-110 transition-transform z-10 relative`}
+                    >
+                      {med.icon}
+                    </div>
+                    {/* Connection line pointing towards the exact time on the grid */}
+                    <div className="w-[3px] h-32 bg-blue-500/40 border-l border-dashed border-blue-400 group-hover:bg-blue-500/70 transition-colors"></div>
+                  </div>
+                  
+                  <div className="absolute top-14 bg-blue-950 border border-blue-500/50 text-white text-xs px-3 py-2 rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-2xl flex flex-col items-center z-30">
+                    <span className="font-bold text-blue-50 text-sm mb-0.5">{med.drugName}</span>
+                    <span className="text-sky-300 font-semibold bg-blue-900/50 px-2 py-0.5 rounded">{med.recommendedTime}</span>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
           </div>
 
           <p className="text-xs text-muted-foreground mt-4 flex items-center gap-2">
@@ -576,8 +595,8 @@ const ChronobiologyMedicationScheduler = () => {
               <p className="text-sm text-muted-foreground mt-1">Medications</p>
               <p className="text-xs text-muted-foreground mt-2">With LLM explanations</p>
             </div>
-            <div className="p-4 rounded-lg bg-gradient-to-br from-purple-100 to-transparent border border-purple-200">
-              <p className="text-3xl font-bold text-purple-600">{insights.length}</p>
+            <div className="p-4 rounded-lg bg-gradient-to-br from-amber-100 to-transparent border border-amber-200">
+              <p className="text-3xl font-bold text-amber-600">{insights.length}</p>
               <p className="text-sm text-muted-foreground mt-1">Circadian Insights</p>
               <p className="text-xs text-muted-foreground mt-2">AI-generated analysis</p>
             </div>

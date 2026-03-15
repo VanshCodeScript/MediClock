@@ -41,13 +41,8 @@ const computeDurationSeconds = (startedAt, endedAt) => {
   );
 };
 
-<<<<<<< HEAD
 export const registerCallSignaling = (io) => {
   io.on("connection", (socket) => {
-=======
-export const registerCallSignaling = (io, connectedUsers = new Map()) => {
-  io.on('connection', (socket) => {
->>>>>>> 22c59da1910522c4375f3c6a1ff1312536df09c9
     console.log(`🔌 Socket connected: ${socket.id}`);
 
     socket.on("user:register", async ({ userId }) => {
@@ -93,11 +88,13 @@ export const registerCallSignaling = (io, connectedUsers = new Map()) => {
           calleeRole = "doctor",
         } = payload || {};
 
-<<<<<<< HEAD
+        console.log(`📞 Call initiation requested: ${callerId} (${callerRole}) → ${calleeId} (${calleeRole})`);
+
         const normalizedCallerId = normalizeUserId(callerId);
         const normalizedCalleeId = normalizeUserId(calleeId);
 
         if (!normalizedCallerId || !normalizedCalleeId || !callerName) {
+          console.error("❌ Invalid call parameters");
           ack?.({
             ok: false,
             error: "callerId, callerName and calleeId are required",
@@ -109,39 +106,19 @@ export const registerCallSignaling = (io, connectedUsers = new Map()) => {
           !mongoose.isValidObjectId(normalizedCallerId) ||
           !mongoose.isValidObjectId(normalizedCalleeId)
         ) {
+          console.error("❌ Invalid MongoDB ObjectIds");
           ack?.({
             ok: false,
             error: "callerId and calleeId must be valid MongoDB ObjectIds",
           });
-=======
-        console.log(`📞 Call initiation requested: ${callerId} (${callerRole}) → ${calleeId} (${calleeRole})`);
-
-        if (!callerId || !calleeId || !callerName) {
-          console.error("❌ Invalid call parameters");
-          ack?.({ ok: false, error: 'callerId, callerName and calleeId are required' });
-          return;
-        }
-
-        const normalizedCallerId = normalizeUserId(callerId);
-        const normalizedCalleeId = normalizeUserId(calleeId);
-
-        if (!mongoose.isValidObjectId(normalizedCallerId) || !mongoose.isValidObjectId(normalizedCalleeId)) {
-          console.error("❌ Invalid MongoDB ObjectIds");
-          ack?.({ ok: false, error: 'callerId and calleeId must be valid MongoDB ObjectIds' });
->>>>>>> 22c59da1910522c4375f3c6a1ff1312536df09c9
           return;
         }
 
         const roomName = buildRoomName(normalizedCallerId);
 
-<<<<<<< HEAD
         const calleeRoom = io.sockets.adapter.rooms.get(
           userRoom(normalizedCalleeId)
         );
-
-=======
-        const calleeRoom = io.sockets.adapter.rooms.get(userRoom(normalizedCalleeId));
->>>>>>> 22c59da1910522c4375f3c6a1ff1312536df09c9
         const calleeOnlineByRoom = !!calleeRoom && calleeRoom.size > 0;
         const calleeOnlineByMap =
           (connectedUsers.get(normalizedCalleeId)?.size || 0) > 0;
@@ -149,10 +126,7 @@ export const registerCallSignaling = (io, connectedUsers = new Map()) => {
         const calleeOnline = calleeOnlineByRoom || calleeOnlineByMap;
 
         if (!calleeOnline) {
-<<<<<<< HEAD
-=======
           console.error(`❌ Callee ${normalizedCalleeId} is not connected`);
->>>>>>> 22c59da1910522c4375f3c6a1ff1312536df09c9
           ack?.({
             ok: false,
             error:
@@ -160,11 +134,7 @@ export const registerCallSignaling = (io, connectedUsers = new Map()) => {
           });
           return;
         }
-<<<<<<< HEAD
-=======
-        
         console.log(`✅ Callee ${normalizedCalleeId} is online`);
->>>>>>> 22c59da1910522c4375f3c6a1ff1312536df09c9
 
         const call = await Call.create({
           callerId: normalizedCallerId,
@@ -187,7 +157,6 @@ export const registerCallSignaling = (io, connectedUsers = new Map()) => {
           status: call.status,
         };
 
-<<<<<<< HEAD
         io.to(userRoom(normalizedCalleeId)).emit(
           "call:incoming",
           eventPayload
@@ -197,13 +166,9 @@ export const registerCallSignaling = (io, connectedUsers = new Map()) => {
           "call:ringing",
           eventPayload
         );
-=======
-        io.to(userRoom(normalizedCalleeId)).emit('call:incoming', eventPayload);
-        io.to(userRoom(normalizedCallerId)).emit('call:ringing', eventPayload);
         
         console.log(`📤 call:incoming sent to callee ${normalizedCalleeId}`);
-        console.log(`📤 call:ringing sent to caller ${normalizedCallerId}`);
->>>>>>> 22c59da1910522c4375f3c6a1ff1312536df09c9
+        console.log(`�� call:ringing sent to caller ${normalizedCallerId}`);
 
         ack?.({ ok: true, call: eventPayload });
       } catch (error) {
@@ -316,19 +281,16 @@ export const registerCallSignaling = (io, connectedUsers = new Map()) => {
       }
     });
 
-<<<<<<< HEAD
-    socket.on("disconnect", () => {
-=======
-    socket.on('call:chat', async ({ callId, senderId, senderName, text }, ack) => {
+    socket.on("call:chat", async ({ callId, senderId, senderName, text }, ack) => {
       try {
         if (!callId || !senderId || !text) {
-          ack?.({ ok: false, error: 'callId, senderId and text are required' });
+          ack?.({ ok: false, error: "callId, senderId and text are required" });
           return;
         }
 
         const call = await Call.findById(callId);
         if (!call) {
-          ack?.({ ok: false, error: 'Call not found' });
+          ack?.({ ok: false, error: "Call not found" });
           return;
         }
 
@@ -336,13 +298,13 @@ export const registerCallSignaling = (io, connectedUsers = new Map()) => {
           id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
           callId: String(call._id),
           senderId: String(senderId),
-          senderName: senderName || 'Participant',
+          senderName: senderName || "Participant",
           text: String(text),
           createdAt: new Date().toISOString(),
         };
 
-        io.to(userRoom(String(call.callerId))).emit('call:chat', message);
-        io.to(userRoom(String(call.calleeId))).emit('call:chat', message);
+        io.to(userRoom(String(call.callerId))).emit("call:chat", message);
+        io.to(userRoom(String(call.calleeId))).emit("call:chat", message);
 
         ack?.({ ok: true, message });
       } catch (error) {
@@ -350,17 +312,13 @@ export const registerCallSignaling = (io, connectedUsers = new Map()) => {
       }
     });
 
-    socket.on('disconnect', () => {
->>>>>>> 22c59da1910522c4375f3c6a1ff1312536df09c9
+    socket.on("disconnect", () => {
       const userId = normalizeUserId(socket.data?.userId);
 
       if (!userId) return;
 
       removeConnectedSocket(userId, socket.id);
-<<<<<<< HEAD
-=======
       console.log(`🛑 User disconnected: ${userId}`);
->>>>>>> 22c59da1910522c4375f3c6a1ff1312536df09c9
     });
   });
 };
