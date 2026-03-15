@@ -3,12 +3,9 @@ import Call from "../models/Call.js";
 
 const userRoom = (userId) => `user:${userId}`;
 const buildRoomName = (callerId) => `consultation_${callerId}_${Date.now()}`;
-
-const connectedUsers = new Map();
-
 const normalizeUserId = (value) => String(value || "").trim();
 
-const addConnectedSocket = (userId, socketId) => {
+const addConnectedSocket = (connectedUsers, userId, socketId) => {
   if (!userId || !socketId) return;
 
   const next = connectedUsers.get(userId) || new Set();
@@ -16,7 +13,7 @@ const addConnectedSocket = (userId, socketId) => {
   connectedUsers.set(userId, next);
 };
 
-const removeConnectedSocket = (userId, socketId) => {
+const removeConnectedSocket = (connectedUsers, userId, socketId) => {
   if (!userId || !socketId) return;
 
   const existing = connectedUsers.get(userId);
@@ -34,27 +31,20 @@ const removeConnectedSocket = (userId, socketId) => {
 
 const computeDurationSeconds = (startedAt, endedAt) => {
   if (!startedAt || !endedAt) return 0;
-
-  return Math.max(
-    0,
-    Math.round((endedAt.getTime() - startedAt.getTime()) / 1000)
-  );
+  return Math.max(0, Math.round((endedAt.getTime() - startedAt.getTime()) / 1000));
 };
 
-export const registerCallSignaling = (io) => {
+export const registerCallSignaling = (io, connectedUsers = new Map()) => {
   io.on("connection", (socket) => {
-    console.log(`🔌 Socket connected: ${socket.id}`);
+    console.log(`Socket connected: ${socket.id}`);
 
     socket.on("user:register", async ({ userId }) => {
       const normalizedUserId = normalizeUserId(userId);
       if (!normalizedUserId) return;
 
       socket.data.userId = normalizedUserId;
-
-      addConnectedSocket(normalizedUserId, socket.id);
-
+      addConnectedSocket(connectedUsers, normalizedUserId, socket.id);
       socket.join(userRoom(normalizedUserId));
-
       socket.emit("user:registered", { userId: normalizedUserId });
 
       try {
@@ -88,13 +78,10 @@ export const registerCallSignaling = (io) => {
           calleeRole = "doctor",
         } = payload || {};
 
-        console.log(`📞 Call initiation requested: ${callerId} (${callerRole}) → ${calleeId} (${calleeRole})`);
-
         const normalizedCallerId = normalizeUserId(callerId);
         const normalizedCalleeId = normalizeUserId(calleeId);
 
         if (!normalizedCallerId || !normalizedCalleeId || !callerName) {
-          console.error("❌ Invalid call parameters");
           ack?.({
             ok: false,
             error: "callerId, callerName and calleeId are required",
@@ -106,7 +93,6 @@ export const registerCallSignaling = (io) => {
           !mongoose.isValidObjectId(normalizedCallerId) ||
           !mongoose.isValidObjectId(normalizedCalleeId)
         ) {
-          console.error("❌ Invalid MongoDB ObjectIds");
           ack?.({
             ok: false,
             error: "callerId and calleeId must be valid MongoDB ObjectIds",
@@ -115,18 +101,12 @@ export const registerCallSignaling = (io) => {
         }
 
         const roomName = buildRoomName(normalizedCallerId);
-
-        const calleeRoom = io.sockets.adapter.rooms.get(
-          userRoom(normalizedCalleeId)
-        );
+        const calleeRoom = io.sockets.adapter.rooms.get(userRoom(normalizedCalleeId));
         const calleeOnlineByRoom = !!calleeRoom && calleeRoom.size > 0;
-        const calleeOnlineByMap =
-          (connectedUsers.get(normalizedCalleeId)?.size || 0) > 0;
-
+        const calleeOnlineByMap = (connectedUsers.get(normalizedCalleeId)?.size || 0) > 0;
         const calleeOnline = calleeOnlineByRoom || calleeOnlineByMap;
 
         if (!calleeOnline) {
-          console.error(`❌ Callee ${normalizedCalleeId} is not connected`);
           ack?.({
             ok: false,
             error:
@@ -134,7 +114,6 @@ export const registerCallSignaling = (io) => {
           });
           return;
         }
-        console.log(`✅ Callee ${normalizedCalleeId} is online`);
 
         const call = await Call.create({
           callerId: normalizedCallerId,
@@ -157,18 +136,8 @@ export const registerCallSignaling = (io) => {
           status: call.status,
         };
 
-        io.to(userRoom(normalizedCalleeId)).emit(
-          "call:incoming",
-          eventPayload
-        );
-
-        io.to(userRoom(normalizedCallerId)).emit(
-          "call:ringing",
-          eventPayload
-        );
-        
-        console.log(`📤 call:incoming sent to callee ${normalizedCalleeId}`);
-        console.log(`�� call:ringing sent to caller ${normalizedCallerId}`);
+        io.to(userRoom(normalizedCalleeId)).emit("call:incoming", eventPayload);
+        io.to(userRoom(normalizedCallerId)).emit("call:ringing", eventPayload);
 
         ack?.({ ok: true, call: eventPayload });
       } catch (error) {
@@ -255,10 +224,7 @@ export const registerCallSignaling = (io) => {
 
         existingCall.status = "ended";
         existingCall.endedAt = endedAt;
-        existingCall.durationSeconds = computeDurationSeconds(
-          existingCall.startedAt,
-          endedAt
-        );
+        existingCall.durationSeconds = computeDurationSeconds(existingCall.startedAt, endedAt);
 
         await existingCall.save();
 
@@ -314,11 +280,10 @@ export const registerCallSignaling = (io) => {
 
     socket.on("disconnect", () => {
       const userId = normalizeUserId(socket.data?.userId);
-
       if (!userId) return;
 
-      removeConnectedSocket(userId, socket.id);
-      console.log(`🛑 User disconnected: ${userId}`);
+      removeConnectedSocket(connectedUsers, userId, socket.id);
+      console.log(`User disconnected: ${userId}`);
     });
   });
 };
