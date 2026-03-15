@@ -11,11 +11,7 @@ const getApiBaseUrl = () => {
     return String(envBase).replace(/\/$/, "");
   }
 
-  if (typeof window !== "undefined") {
-    return `${window.location.protocol}//${window.location.hostname}:5001/api/v1`;
-  }
-
-  return "http://localhost:5001/api/v1";
+  return "https://mediclock.onrender.com/api/v1";
 };
 
 const API_BASE = getApiBaseUrl();

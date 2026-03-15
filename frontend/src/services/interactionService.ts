@@ -37,7 +37,7 @@ export interface InteractionCheckResponse {
 /* ------------------------------------------------ */
 
 const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:8000";
+  import.meta.env.VITE_API_BASE_URL || "https://mediclock.onrender.com/api/v1";
 
 const REQUEST_TIMEOUT = 8000;
 

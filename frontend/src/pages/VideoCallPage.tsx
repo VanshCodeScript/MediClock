@@ -18,11 +18,7 @@ const resolveSocketBase = () => {
     return String(envApiBase).replace(/\/api(?:\/v1)?\/?$/, "").replace(/\/$/, "");
   }
 
-  if (typeof window !== "undefined") {
-    return `${window.location.protocol}//${window.location.hostname}:5001`;
-  }
-
-  return "http://localhost:5001";
+  return "https://mediclock.onrender.com";
 };
 
 const API_BASE = resolveSocketBase();
