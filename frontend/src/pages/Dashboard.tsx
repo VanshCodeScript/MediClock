@@ -55,6 +55,7 @@ type WearableMetrics = {
   steps: number;
   activityLevel: string;
   movementScore: number;
+  heartRate: number | null;
   recordedAt: string | null;
 };
 
@@ -452,6 +453,7 @@ const Dashboard = () => {
   const [needsSensorPermission, setNeedsSensorPermission] = useState(false);
   const [sensorStarted, setSensorStarted] = useState(false);
   const [wearables, setWearables] = useState<WearableMetrics | null>(null);
+  const [displaySteps, setDisplaySteps] = useState(0);
   const movementHistoryRef = useRef<number[]>([]);
   const [data, setData] = useState<DashboardData>({
     timeline: [],
@@ -513,6 +515,7 @@ const Dashboard = () => {
         steps: Number(payload?.steps ?? 0),
         activityLevel: String(payload?.activityLevel || "idle"),
         movementScore: smoothMovementScore(Number(payload?.movementScore ?? 0)),
+        heartRate: Number.isFinite(Number(payload?.heartRate)) ? Number(payload.heartRate) : null,
         recordedAt: payload?.recordedAt || null,
       });
       setWearablesError(null);
@@ -557,12 +560,6 @@ const Dashboard = () => {
   }, [syncWearables]);
 
   useEffect(() => {
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, [syncWearables]);
-
-  useEffect(() => {
     let active = true;
 
     wearableSensorsService.setCallbacks({
@@ -573,6 +570,7 @@ const Dashboard = () => {
           steps: snapshot.steps,
           activityLevel: snapshot.activityLevel,
           movementScore: smoothMovementScore(snapshot.movementScore),
+          heartRate: snapshot.heartRate,
           recordedAt: snapshot.timestamp,
         }));
       },
@@ -599,6 +597,31 @@ const Dashboard = () => {
       wearableSensorsService.setCallbacks({});
     };
   }, [smoothMovementScore]);
+
+  useEffect(() => {
+    const targetSteps = Math.max(0, Math.round(wearables?.steps ?? 0));
+    const intervalId = window.setInterval(() => {
+      setDisplaySteps((prev) => {
+        if (prev === targetSteps) {
+          return prev;
+        }
+
+        const delta = targetSteps - prev;
+        const jump = Math.max(1, Math.round(Math.abs(delta) * 0.22));
+        const next = prev + Math.sign(delta) * jump;
+
+        if ((delta > 0 && next > targetSteps) || (delta < 0 && next < targetSteps)) {
+          return targetSteps;
+        }
+
+        return next;
+      });
+    }, 220);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [wearables?.steps]);
 
   const enableMotionSensors = async () => {
     const result = await wearableSensorsService.requestPermissionAndStart();
@@ -726,9 +749,12 @@ const Dashboard = () => {
         : `Plan light movement and hydration near ${format12h(nextAnchor.time)}.`
     : "Keep a consistent wake, meal, and sleep routine today.";
 
-  const parsedHeartRate = Number(data.healthLatest?.heartRate);
-  const heartRateValue = Number.isFinite(parsedHeartRate) ? Math.round(parsedHeartRate) : null;
-  const stepsValue = wearables?.steps ?? 0;
+  const wearableHeartRate = Number(wearables?.heartRate);
+  const metricsHeartRate = Number(data.healthLatest?.heartRate);
+  const preferredHeartRate = Number.isFinite(wearableHeartRate) ? wearableHeartRate : metricsHeartRate;
+  const hasRealHeartRate = Number.isFinite(preferredHeartRate);
+  const heartRateValue = hasRealHeartRate ? Math.round(preferredHeartRate) : null;
+  const stepsValue = displaySteps;
   const movementScoreValue = wearables?.movementScore ?? 0;
   const activityLevelValue = wearables?.activityLevel || "idle";
 
@@ -811,11 +837,13 @@ const Dashboard = () => {
           unit="bpm"
           icon={<HeartPulse className="w-5 h-5" />}
           trend={
-            heartRateValue === null
-              ? "Heart rate not available on this device."
+            !hasRealHeartRate
+              ? "Heart rate available when connected to wearable device."
               : wearablesLoading
                 ? "Syncing..."
-                : "From connected health source"
+                : Number.isFinite(wearableHeartRate)
+                  ? "Live wearable demo stream"
+                  : "From connected health source"
           }
           status={heartRateStatus}
         />

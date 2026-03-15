@@ -6,6 +6,7 @@ export type WearableSnapshot = {
   steps: number;
   activityLevel: ActivityLevel;
   movementScore: number;
+  heartRate: number;
   timestamp: string;
 };
 
@@ -17,84 +18,36 @@ export type SensorStartResult = {
 
 type MotionPermissionState = 'granted' | 'denied' | 'default';
 
-type IOSDeviceMotionEvent = typeof DeviceMotionEvent & {
-  requestPermission?: () => Promise<'granted' | 'denied'>;
-};
+const TRANSMIT_INTERVAL_MS = 15 * 1000;
+const HEART_RATE_UPDATE_MS = 3 * 1000;
+const STEP_UPDATE_MS = 5 * 1000;
+const MAX_SIMULATED_STEPS = 15;
 
-const TRANSMIT_INTERVAL_MS = 30 * 1000;
-const PROCESS_INTERVAL_MS = 200;
-const STEP_THRESHOLD = 11.5;
-const STEP_DEBOUNCE_MS = 300;
-const IDLE_THRESHOLD = 10.2;
-const GRAVITY_SMOOTHING_ALPHA = 0.9;
-const MOVEMENT_SMOOTHING_ALPHA = 0.75;
-const EARTH_GRAVITY = 9.81;
-const MAX_MOVEMENT_SCORE = 20;
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
-const classifyActivityLevel = (movementScore: number): ActivityLevel => {
-  if (movementScore < 1.5) return 'idle';
-  if (movementScore <= 4) return 'walking';
-  return 'running';
+const randomFloat = (min: number, max: number) => Math.random() * (max - min) + min;
+
+const randomInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
+
+const nextStepIncrement = () => {
+  const roll = Math.random();
+  if (roll < 0.65) return 0;
+  if (roll < 0.95) return 1;
+  return 2;
 };
 
 class WearableSensorsService {
   private steps = 0;
-  private movementScore = 0;
-  private activityLevel: ActivityLevel = 'idle';
-  private lastProcessTimestamp = 0;
-  private lastStepTimestamp = 0;
-  private previousMagnitude = EARTH_GRAVITY;
-  private gravityBaseline = EARTH_GRAVITY;
-  private smoothedLinearMovement = 0;
+  private movementScore = 0.8;
+  private heartRate = 72;
+  private activityLevel: ActivityLevel = 'walking';
   private transmitIntervalId: number | null = null;
+  private heartRateIntervalId: number | null = null;
+  private stepsIntervalId: number | null = null;
   private running = false;
   private permissionState: MotionPermissionState = 'default';
   private onUpdate: ((snapshot: WearableSnapshot) => void) | null = null;
   private onError: ((message: string) => void) | null = null;
-
-  private readonly handleMotionEvent = (event: DeviceMotionEvent) => {
-    const now = Date.now();
-    if (now - this.lastProcessTimestamp < PROCESS_INTERVAL_MS) {
-      return;
-    }
-    this.lastProcessTimestamp = now;
-
-    const acceleration = event.accelerationIncludingGravity;
-    if (!acceleration) {
-      return;
-    }
-
-    const x = Number(acceleration.x ?? 0);
-    const y = Number(acceleration.y ?? 0);
-    const z = Number(acceleration.z ?? 0);
-
-    const magnitude = Math.sqrt(x * x + y * y + z * z);
-    this.gravityBaseline =
-      GRAVITY_SMOOTHING_ALPHA * this.gravityBaseline + (1 - GRAVITY_SMOOTHING_ALPHA) * magnitude;
-
-    const linearMovement = Math.abs(magnitude - this.gravityBaseline);
-    this.smoothedLinearMovement =
-      MOVEMENT_SMOOTHING_ALPHA * this.smoothedLinearMovement +
-      (1 - MOVEMENT_SMOOTHING_ALPHA) * linearMovement;
-
-    this.movementScore = Number(
-      Math.min(MAX_MOVEMENT_SCORE, this.smoothedLinearMovement * 10).toFixed(2)
-    );
-    this.activityLevel = classifyActivityLevel(this.movementScore);
-
-    const crossedThreshold = this.previousMagnitude <= STEP_THRESHOLD && magnitude > STEP_THRESHOLD;
-    const notIdle = magnitude >= IDLE_THRESHOLD;
-    const stepDebounced = now - this.lastStepTimestamp > STEP_DEBOUNCE_MS;
-
-    if (notIdle && crossedThreshold && stepDebounced) {
-      this.steps += 1;
-      this.lastStepTimestamp = now;
-    }
-
-    this.previousMagnitude = magnitude;
-
-    this.emitUpdate();
-  };
 
   setCallbacks(callbacks: {
     onUpdate?: (snapshot: WearableSnapshot) => void;
@@ -109,59 +62,21 @@ class WearableSensorsService {
       return { started: true };
     }
 
-    if (typeof window === 'undefined') {
-      return { started: false, message: 'Motion sensors not available on this device.' };
-    }
+    this.running = true;
+    this.activityLevel = 'walking';
+    this.permissionState = 'granted';
+    this.startSimulationLoops();
+    this.startUploadLoop();
+    this.emitUpdate();
 
-    if (!window.isSecureContext) {
-      return {
-        started: false,
-        message: 'Motion sensors require HTTPS on mobile browsers. Open Mediclock over HTTPS to enable live motion tracking.',
-      };
-    }
-
-    if (typeof DeviceMotionEvent === 'undefined' && !('ondevicemotion' in window)) {
-      return { started: false, message: 'Motion sensors not available on this device.' };
-    }
-
-    if (this.needsExplicitPermission() && this.permissionState !== 'granted') {
-      return {
-        started: false,
-        requiresPermission: true,
-        message: 'Motion permission is required to start wearable tracking.',
-      };
-    }
-
-    this.beginListeners();
-    return { started: true };
+    return {
+      started: true,
+      message: 'Wearable demo simulation is active.',
+    };
   }
 
   async requestPermissionAndStart(): Promise<SensorStartResult> {
-    if (!this.needsExplicitPermission()) {
-      return this.start();
-    }
-
-    try {
-      const motionEvent = DeviceMotionEvent as IOSDeviceMotionEvent;
-      const permission = await motionEvent.requestPermission?.();
-
-      if (permission !== 'granted') {
-        this.permissionState = 'denied';
-        return {
-          started: false,
-          message: 'Motion permission denied. Motion sensors not available on this device.',
-        };
-      }
-
-      this.permissionState = 'granted';
-      return this.start();
-    } catch {
-      this.permissionState = 'denied';
-      return {
-        started: false,
-        message: 'Motion permission denied. Motion sensors not available on this device.',
-      };
-    }
+    return this.start();
   }
 
   stop() {
@@ -169,31 +84,49 @@ class WearableSensorsService {
       return;
     }
 
-    window.removeEventListener('devicemotion', this.handleMotionEvent);
     if (this.transmitIntervalId !== null) {
       window.clearInterval(this.transmitIntervalId);
       this.transmitIntervalId = null;
     }
 
+    if (this.heartRateIntervalId !== null) {
+      window.clearInterval(this.heartRateIntervalId);
+      this.heartRateIntervalId = null;
+    }
+
+    if (this.stepsIntervalId !== null) {
+      window.clearInterval(this.stepsIntervalId);
+      this.stepsIntervalId = null;
+    }
+
     this.running = false;
-    this.lastProcessTimestamp = 0;
-    this.lastStepTimestamp = 0;
-    this.previousMagnitude = EARTH_GRAVITY;
-    this.gravityBaseline = EARTH_GRAVITY;
-    this.smoothedLinearMovement = 0;
   }
 
-  private beginListeners() {
-    this.lastProcessTimestamp = 0;
-    this.lastStepTimestamp = 0;
-    this.previousMagnitude = EARTH_GRAVITY;
-    this.gravityBaseline = EARTH_GRAVITY;
-    this.smoothedLinearMovement = 0;
+  private startSimulationLoops() {
+    if (this.heartRateIntervalId !== null) {
+      window.clearInterval(this.heartRateIntervalId);
+    }
+    if (this.stepsIntervalId !== null) {
+      window.clearInterval(this.stepsIntervalId);
+    }
 
-    window.addEventListener('devicemotion', this.handleMotionEvent, { passive: true });
+    this.heartRateIntervalId = window.setInterval(() => {
+      this.heartRate = clamp(Math.round(this.heartRate + randomFloat(-2, 2)), 70, 85);
+      this.emitUpdate();
+    }, HEART_RATE_UPDATE_MS);
 
-    this.running = true;
-    this.emitUpdate();
+    this.stepsIntervalId = window.setInterval(() => {
+      this.steps = clamp(this.steps + nextStepIncrement(), 0, MAX_SIMULATED_STEPS);
+      this.activityLevel = 'walking';
+      this.movementScore = Number(randomFloat(0.5, 1.2).toFixed(2));
+      this.emitUpdate();
+    }, STEP_UPDATE_MS);
+  }
+
+  private startUploadLoop() {
+    if (this.transmitIntervalId !== null) {
+      window.clearInterval(this.transmitIntervalId);
+    }
 
     this.transmitIntervalId = window.setInterval(() => {
       void this.transmitSnapshot();
@@ -217,11 +150,7 @@ class WearableSensorsService {
         return;
       }
 
-      if (
-        !Number.isFinite(snapshot.movementScore) ||
-        snapshot.movementScore < 0 ||
-        snapshot.movementScore > MAX_MOVEMENT_SCORE
-      ) {
+      if (!Number.isFinite(snapshot.movementScore) || snapshot.movementScore < 0 || snapshot.movementScore > 20) {
         this.onError?.('Invalid movement score detected. Upload skipped.');
         return;
       }
@@ -229,8 +158,9 @@ class WearableSensorsService {
       await api.wearables.update({
         userId,
         steps: snapshot.steps,
-        activityLevel: snapshot.activityLevel,
+        activityLevel: 'walking',
         movementScore: snapshot.movementScore,
+        heartRate: snapshot.heartRate,
         timestamp: snapshot.timestamp,
       });
     } catch (error: any) {
@@ -245,19 +175,15 @@ class WearableSensorsService {
   private getSnapshot(): WearableSnapshot {
     return {
       steps: this.steps,
-      activityLevel: this.activityLevel,
+      activityLevel: 'walking',
       movementScore: this.movementScore,
+      heartRate: this.heartRate,
       timestamp: new Date().toISOString(),
     };
   }
 
   private emitUpdate() {
     this.onUpdate?.(this.getSnapshot());
-  }
-
-  private needsExplicitPermission() {
-    const motionEvent = DeviceMotionEvent as IOSDeviceMotionEvent;
-    return typeof motionEvent.requestPermission === 'function';
   }
 }
 

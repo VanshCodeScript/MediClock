@@ -297,6 +297,11 @@ export const api = {
       const userId = String(wearableData?.userId || '').trim();
       const steps = Number(wearableData?.steps);
       const movementScore = Number(wearableData?.movementScore);
+      const hasHeartRate =
+        wearableData?.heartRate !== null &&
+        wearableData?.heartRate !== undefined &&
+        wearableData?.heartRate !== '';
+      const heartRate = hasHeartRate ? Number(wearableData?.heartRate) : null;
 
       if (!userId) {
         throw new Error('Invalid wearable payload: userId is required');
@@ -310,6 +315,10 @@ export const api = {
         throw new Error('Invalid wearable payload: movementScore out of range');
       }
 
+      if (hasHeartRate && (!Number.isFinite(heartRate) || heartRate < 30 || heartRate > 220)) {
+        throw new Error('Invalid wearable payload: heartRate out of range');
+      }
+
       const response = await fetch(`${API_BASE_URL}/wearables/update`, {
         method: 'POST',
         headers: authHeaders(),
@@ -318,6 +327,7 @@ export const api = {
           userId,
           steps: Math.round(steps),
           movementScore: Number(movementScore.toFixed(2)),
+          heartRate: hasHeartRate ? Math.round(heartRate) : null,
         }),
       });
 
