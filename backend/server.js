@@ -62,13 +62,17 @@ const isTryCloudflareOrigin = (origin = '') => {
   return /^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/i.test(origin);
 };
 
+const isVercelOrigin = (origin = '') => {
+  return /\.vercel\.app$/i.test(origin);
+};
+
 const corsOrigin = (origin, callback) => {
   if (!origin) {
     callback(null, true);
     return;
   }
 
-  if (staticAllowedOrigins.includes(origin) || isLanOrigin(origin) || isTryCloudflareOrigin(origin)) {
+  if (staticAllowedOrigins.includes(origin) || isLanOrigin(origin) || isTryCloudflareOrigin(origin) || isVercelOrigin(origin)) {
     callback(null, true);
     return;
   }
